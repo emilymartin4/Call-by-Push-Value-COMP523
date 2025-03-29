@@ -77,11 +77,11 @@ let rec typeof (env : env) (t : tm) : typ =
   | Inr t -> (match typeof env t with 
       | TypV (Sum (a1, a2)) -> TypV a2
       | _ -> raise (TypeBad "Inl isnt working:("))
-  | Lam x t 
-  | App 
-  | Produce 
-  | Force 
-  | Thunk
+  | Lam x -> failwith "Not implemented"
+  | App (t1, t2) -> failwith "Not implemented"
+  | Produce t -> failwith "Not implemented"
+  | Force t -> failwith "Not implemented"
+  | Thunk t -> failwith "Not implemented"
 
 
 
