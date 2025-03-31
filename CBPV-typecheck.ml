@@ -27,9 +27,6 @@ type tm =
 | IfThEl of tm * tm * tm
 | LetIn of string * tm * tm
 | LazyPair of tm * tm 
-(*
-| Match... of tm
-*)
 | Fst of tm
 | Snd of tm
 | EagerPair of tm * tm
