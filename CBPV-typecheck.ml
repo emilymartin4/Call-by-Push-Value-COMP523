@@ -21,6 +21,7 @@ tpC =
 (* terms/expressions (whats even the difference)*)
 type tm = 
 | Var of string
+| Unit
 | True 
 | False
 | Zero
@@ -36,7 +37,7 @@ type tm =
 | Inr of tm
 | Case of tm * string * tm * string * tm
 | Lam of string * tpV * tm                  (* also called pop *)
-| App of tm * tm                             (* also called push *)
+| App of tm * tm                            (* also called push *)
 | Produce of tm
 | Force of tm
 | Thunk of tm
@@ -56,6 +57,7 @@ let rec typeofV (ctx:ctx) (t : tm) : tpV = match t with
   | Var x -> (match find_opt (fun y -> fst y = x ) ctx with 
     | None -> raise (TypeBad ("variable " ^ x ^ " is free"))
     | Some x ->  snd x )
+  | Unit -> Unit
   | True | False -> Bool
   | Zero -> Nat
   | Suc x -> typeofV ctx x
@@ -82,7 +84,7 @@ let rec typeofV (ctx:ctx) (t : tm) : tpV = match t with
 
 and typeofC  (ctx : ctx) (t : tm) : tpC = match t with
   | Lam (x,a,t) -> Arrow( a, typeofC ((x,a)::(List.filter (fun z -> fst z != x ) ctx)) t)            
-  | LetIn (x, t1, t2) -> typeofC ((x, typeofV ctx t1) :: (List.filter (fun z -> fst z != x ) ctx)) t2 
+  | LetIn (x, v, t2) -> typeofC ((x, typeofV ctx v) :: (List.filter (fun z -> fst z != x ) ctx)) t2 
   | Produce t -> F (typeofV ctx t)
   | Force t -> (match typeofV ctx t with 
     | U t' -> t'
