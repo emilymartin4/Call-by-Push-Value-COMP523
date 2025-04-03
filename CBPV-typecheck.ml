@@ -139,5 +139,7 @@ let rec eval t = match t with
 (* what is M to x.N || T on page 45? *)
 
 
-(* transpiler from CBN to CBPV p277*)
+(* transpiler from CBN to CBPV p277
+Wrap any arguments (things being applied to a lam) in thunks to delay evaluation.
+*)
 
