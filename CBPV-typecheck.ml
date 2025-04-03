@@ -13,7 +13,8 @@ type tpV =
 and 
 tpC = 
 | F of tpV             (* type of Force x *)
-| Arrow of tpV * tpC
+| VArrow of tpV * tpC
+| CArrow of tpC * tpC
 | LCross of tpC * tpC  
 
 
@@ -37,7 +38,8 @@ type tm =
 | Inr of tm
 | Case of tm * string * tm * string * tm
 | Lam of string * tpV * tm                  (* also called pop *)
-| App of tm * tm                            (* also called push *)
+| VApp of tm * tm                           (* also called push *)
+| CApp of tm * tm              (* still need to add a rule for this. this is the M to x.N rule*)              
 | Produce of tm
 | Force of tm
 | Thunk of tm
@@ -83,7 +85,7 @@ let rec typeofV (ctx:ctx) (t : tm) : tpV = match t with
   | _ ->  raise (TypeBad ("supposed to be a value, but its not"))
 
 and typeofC  (ctx : ctx) (t : tm) : tpC = match t with
-  | Lam (x,a,t) -> Arrow( a, typeofC ((x,a)::(List.filter (fun z -> fst z != x ) ctx)) t)            
+  | Lam (x,a,t) -> VArrow( a, typeofC ((x,a)::(List.filter (fun z -> fst z != x ) ctx)) t)            
   | LetIn (x, v, t2) -> typeofC ((x, typeofV ctx v) :: (List.filter (fun z -> fst z != x ) ctx)) t2 
   | Produce t -> F (typeofV ctx t)
   | Force t -> (match typeofV ctx t with 
@@ -96,8 +98,8 @@ and typeofC  (ctx : ctx) (t : tm) : tpC = match t with
   | Snd t -> (match typeofC ctx t with 
       | LCross (_,y) -> y
       | _ -> raise (TypeBad "issue in snd"))
-  | App (v,t2) -> (match typeofC ctx t with 
-      | Arrow (tv,tc) -> if tv = typeofV ctx v then tc else raise (TypeBad "arg being passed doesnt match input type")
+  | VApp (v,t2) -> (match typeofC ctx t with 
+      | VArrow (tv,tc) -> if tv = typeofV ctx v then tc else raise (TypeBad "arg being passed doesnt match input type")
       | _ -> raise (TypeBad "second arg of application needs to be Arrow type"))
   | Print (s,t) -> typeofC ctx t 
   | _ ->  raise (TypeBad ("supposed to be a computation, but its not"))
@@ -131,9 +133,11 @@ let rec eval t = match t with
 | PMPair (v1, x, y, v2)-> (match v1 with 
     | EagerPair (t1,t2) -> subst t2 y (subst t1 x v2)
     | _ -> raise Crash)
-| App (t1,t2) -> 
+| App (t1,t2) -> raise Crash
 | _ -> raise Crash
 
-
-
 (* what is M to x.N || T on page 45? *)
+
+
+(* transpiler from CBN to CBPV p277*)
+
