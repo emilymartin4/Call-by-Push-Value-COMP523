@@ -49,6 +49,7 @@ exception TypeError of string
 (*TODO: enforce anything added to context is a value type (right now this is enforced by ocamls type checker, so we dont display an error message got it. )*)
 
 (* our type checker, split in to two mutually recursive functions. one for values and one for computations. *)
+(* check inl and inr - they are being used to destruct a sum type instead of construct one <- Emily*)
 let rec typeofV (ctx:ctx) (t : named_tm) : tpV = match t with
   | Var x -> (match find_opt (fun y -> fst y = x ) ctx with 
     | None -> raise (TypeError ("variable " ^ x ^ " is free"))
@@ -64,7 +65,7 @@ let rec typeofV (ctx:ctx) (t : named_tm) : tpV = match t with
   | Inl t -> (match typeofV ctx t with 
     | Sum (a1, a2) -> a1
     | _ -> raise (TypeError "Inl isnt working:("))
-  | Inr t ->(match typeofV ctx t with 
+  | Inr t -> (match typeofV ctx t with 
     | Sum (a1, a2) -> a2
     | _ -> raise (TypeError "Inr isnt working:("))
   | Case (t,x,t1,y,t2) -> (match typeofV ctx t with        
@@ -73,7 +74,7 @@ let rec typeofV (ctx:ctx) (t : named_tm) : tpV = match t with
         if b1 = b2 then b1 else raise (TypeError "branches of sym type destructor don't type check")
     | _ -> raise (TypeError "Case trying to match on non-sum type")) 
   | ValPair (t1, t2) -> (let (x,y) = typeofV ctx t1, typeofV ctx t2 in VCross (x,y))  
-  | PMPair (t1, x, y, t2) -> (match typeofV ctx t with 
+  | PMPair (t1, x, y, t2) -> (match typeofV ctx t1 with 
     | VCross (v1,v2) -> typeofV ([(x, v1);(y, v2)]  @ ctx) t2                             
     | _ -> raise (TypeError ("match on eager pair bad")))
   | _ ->  raise (TypeError ("supposed to be a value, but its not"))
@@ -154,7 +155,7 @@ let rec debruijnify (context : ctx) (named_term : named_tm) : tm =
   | Fst t -> Fst (debruijnify context t)
   | Snd t -> Snd (debruijnify context t)
   | ValPair (t1, t2) -> ValPair (debruijnify context t1, debruijnify context t2)
-  | PMPair (t1, x, y, t2) -> PMPair (debruijnify context t1, debruijnify (x :: (y :: context)) t2) 
+  | PMPair (t1, x, y, t2) -> PMPair (debruijnify context t1, debruijnify (y :: (x :: context)) t2) 
   | Inl t -> Inl (debruijnify context t)
   | Inr t -> Inr (debruijnify context t)
   | Case (t, x, t1, y, t2) -> Case (debruijnify context t, debruijnify (x :: context) t1, debruijnify (y :: context) t2) 
@@ -242,7 +243,8 @@ let rec eval (t : tm) = match t with
 )
 | ValPair (t1, t2) -> ValPair (t1, t2)
 | PMPair (v, t2) -> (match v with
-    | ValPair (v1, v2) -> subst v2 0 (subst v1 0 t2)
+    | ValPair (v1, v2) -> let t2' = subst (shift 0 1 v1) 0 t2 in
+    subst v2 0 t2' (* make sure this is the right order of shifts *)
     | _ -> raise Crash)
 | Inl t -> Inl t (* is this right? is this guaranteed to be a value? *)
 | Inr t -> Inr t
