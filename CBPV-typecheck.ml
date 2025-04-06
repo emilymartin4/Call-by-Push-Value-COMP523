@@ -351,7 +351,7 @@ type ntm =
 | SndN of ntm
 | CaseN of ntm * string * ntm * string * ntm
 | InlN of ntm * tpN
-| InlR of ntm * tpN
+| InrN of ntm * tpN
 
 (* following p 59*)
 (* translation on types *)
@@ -363,6 +363,8 @@ let rec trans_tp (tp:tpN) : tpC = match tp with
 | BoolN -> F (Bool)
 | NatN -> F (Nat)
 
+(* TODO: add let in and if then else ?*)
+
 (* translation on terms *)
 let rec trans (t : ntm) : named_tm = match t with 
 | UnitN -> Unit
@@ -370,13 +372,10 @@ let rec trans (t : ntm) : named_tm = match t with
 | SucN n -> Succ (trans n)
 | IsZeroN n -> IsZero (trans n)
 | LamN (x,tp, t) -> Lam (x, U (trans_tp tp), trans t )
-| _ -> jksadjdsfkjlksdf
-(*
-| AppN of ntm * ntm
-| PairN of ntm * ntm
-| FstN of ntm
-| SndN of ntm
-| CaseN of ntm * string * ntm * string * ntm
-| InlN of ntm * tpN
-| InlR of ntm * tpN
-*)
+| AppN (t1,t2) -> App (Thunk (trans t1), trans t2)
+| PairN (t1,t2) -> CompPair (trans t1, trans t2)
+| FstN t -> Fst (trans t)
+| SndN t -> Snd (trans t)                 (* make "z" fresh somehow... *)
+| CaseN (t, x, t1, y, t2) -> Bind (trans t, "z",  Case (Var "z" , x, trans t1,y ,trans t2)) 
+| InlN (t, a) -> Produce (Inl (Thunk (trans t), U (trans_tp a)))
+| InrN (t, a) -> Produce (Inr (Thunk (trans t), U (trans_tp a)))
