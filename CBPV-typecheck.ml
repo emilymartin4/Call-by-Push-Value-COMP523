@@ -179,7 +179,7 @@ let rec debruijnify (context : ctx) (named_term : named_tm) : tm =
   | Unit -> Unit
   | True -> True
   | False -> False
-  | Zero -> False
+  | Zero -> Zero
   | Succ t -> Succ (debruijnify context t)
   | IfThEl (t1, t2, t3) -> IfThEl (debruijnify context t1, debruijnify context t2, debruijnify context t3)
   | LetIn (x, t1, t2) -> LetIn (debruijnify context t1, debruijnify (x :: context) t2)
@@ -203,15 +203,18 @@ let rec debruijnify (context : ctx) (named_term : named_tm) : tm =
 
 (*
    
-
 TODO: test debruijinfy
 let test_debruijnify () = 
-
+PMPair (VarPair (Zero,Unit), "x","y", VarPair (Var "x",Var "y"))
 
 *)
 
-
-
+(* add more of these *)
+let test_debruijnify () = 
+ let test1 = debruijnify [] (PMPair (ValPair (Zero,Unit), "x","y", ValPair (Var "x",Var "y")))in
+ let test2 = debruijnify [] (PMPair (ValPair (Thunk (Lam ("x", Nat, Produce (Var "x"))),Zero), "y","z", App(Var "z",Produce ( Var "y"))))in
+ let test3 = debruijnify [] (PMPair (ValPair (Thunk (Lam ("x", Nat, Produce (Var "x"))),Zero), "y","z", App(Var "z", (Lam ("a", Nat, Produce (Var "a")))))) in
+ test3
 
 
 
@@ -279,21 +282,19 @@ let rec eval (t : tm) = match t with
 | Succ t -> Succ (eval t)
 | IfThEl (t1, t2, t3) -> IfThEl (eval t1, eval t2, eval t3)
 | LetIn (v, t2) -> eval (subst v 0 t2)
-| CompPair (t1, t2) -> CompPair (t1, t2) (* is this right ?? *)
+| CompPair (t1, t2) -> CompPair (t1, t2) (* is this right ??  yeah i think its a value*)
 | Fst t -> (match eval t with
   | CompPair (n1, n2) -> eval n1
-  | _ -> raise Crash
-)
+  | _ -> raise Crash)
 | Snd t -> (match eval t with
-| CompPair (n1, n2) -> eval n2
-| _ -> raise Crash
-)
+  | CompPair (n1, n2) -> eval n2
+  | _ -> raise Crash)
 | ValPair (t1, t2) -> ValPair (t1, t2)
 | PMPair (v, t2) -> (match v with
     | ValPair (v1, v2) -> let t2' = subst (shift 0 1 v1) 0 t2 in
     subst v2 0 t2' (* make sure this is the right order of shifts *)
     | _ -> raise Crash)
-| Inl (t,a) -> Inl (eval t, a) (* is this right? is this guaranteed to be a value? hehhehehe my bad i had inl/inr all wrong. it is fixed now*)
+| Inl (t,a) -> Inl (eval t, a) (* is this right? is this guaranteed to be a value? hehhehehe my bad i had inl/inr all wrong. it is fixed now, also it is eager style*)
 | Inr (t,a) -> Inr (eval t, a)
 | Case (t, t1, t2) -> (match t with
   | Inl (x,a) -> eval (subst x 0 t1)
@@ -302,7 +303,7 @@ let rec eval (t : tm) = match t with
 )
 | Lam (tp, t) -> Lam (tp, t)         
 | App (v, t2) -> (match eval t2 with
-  | Lam (tp, t) -> eval (subst v 0 t) (* how is it guaranteed that v is a value? i guess because it wouldn't have typechecked otherwise? *)
+  | Lam (tp, t) -> eval (subst v 0 t) (* how is it guaranteed that v is a value? i guess because it wouldn't have typechecked otherwise? yes i think so. App takes tpV * tpC *)
   | _ -> raise Crash
 )                    (* also called push *)
 | Bind (t1, t2) -> (match eval t1 with
