@@ -24,6 +24,7 @@ type named_tm =
 | False
 | Zero
 | Succ of named_tm
+| IsZero of named_tm
 | IfThEl of named_tm * named_tm * named_tm (* if t1 then t2 else t3*)
 | LetIn of string * named_tm * named_tm (* let x = t1 in t2 *)
 | CompPair of named_tm * named_tm  (* (t1, t2) *)
@@ -59,6 +60,9 @@ let rec typeofV (ctx:ctx) (t : named_tm) : tpV = match t with
   | False -> Bool
   | Zero -> Nat
   | Succ x -> typeofV ctx x
+  | IsZero n -> (match typeofV ctx n with 
+    | Nat -> Bool
+    | _ -> raise (TypeError ("iszero must be applied to a nat")))
   | IfThEl (t1, t2, t3) -> (match (typeofV ctx t1, typeofV ctx t2,  typeofV ctx t3) with 
     | (Bool, x , y ) -> if x = y then x else raise (TypeError ("branches of if-then-else don't match"))
     | _ -> raise (TypeError ("if then else bad")))
@@ -149,6 +153,7 @@ type tm =
 | False
 | Zero
 | Succ of tm
+| IsZero of tm
 | IfThEl of tm * tm * tm (* if t1 then t2 else t3*)
 | LetIn of tm * tm (* let x = t1 in t2 *)
 | CompPair of tm * tm  (* (t1, t2) *)
@@ -181,6 +186,7 @@ let rec debruijnify (context : ctx) (named_term : named_tm) : tm =
   | False -> False
   | Zero -> Zero
   | Succ t -> Succ (debruijnify context t)
+  | IsZero n -> IsZero (debruijnify context n)
   | IfThEl (t1, t2, t3) -> IfThEl (debruijnify context t1, debruijnify context t2, debruijnify context t3)
   | LetIn (x, t1, t2) -> LetIn (debruijnify context t1, debruijnify (x :: context) t2)
   | CompPair (t1, t2) -> CompPair (debruijnify context t1, debruijnify context t2)
@@ -229,6 +235,7 @@ let rec shift (c : int) (d : int) (t : tm) : tm = match t with
   | False -> False
   | Zero -> Zero
   | Succ t -> Succ (shift c d t)
+  | IsZero t -> IsZero (shift c d t)
   | IfThEl (t1, t2, t3) -> IfThEl (shift c d t1, shift c d t2, shift c d t3)
   | LetIn (t1, t2) -> LetIn (shift c d t1, shift (c + 1) d t2) 
   | CompPair (t1, t2) -> CompPair (shift c d t1, shift c d t2)
@@ -254,6 +261,7 @@ let rec subst (s : tm) (j : int) (t : tm) : tm = match t with
   | False -> False
   | Zero -> Zero
   | Succ t -> Succ (subst s j t)
+  | IsZero t -> IsZero (subst s j t)
   | IfThEl (t1, t2, t3) -> IfThEl (subst s j t1, subst s j t2, subst s j t3)
   | LetIn (t1, t2) -> LetIn (subst s j t1, subst (shift 0 1 s) (j + 1) t2)
   | CompPair (t1, t2) -> CompPair (subst s j t1, subst s j t2)
@@ -280,6 +288,7 @@ let rec eval (t : tm) = match t with
 | False -> False
 | Zero -> Zero
 | Succ t -> Succ (eval t)
+| IsZero t -> IsZero (eval t)
 | IfThEl (t1, t2, t3) -> IfThEl (eval t1, eval t2, eval t3)
 | LetIn (v, t2) -> eval (subst v 0 t2)
 | CompPair (t1, t2) -> CompPair (t1, t2) (* is this right ??  yeah i think its a value*)
@@ -322,3 +331,52 @@ Wrap any arguments (things being applied to a lam) in thunks to delay evaluation
 maybe just define it on paper... (and prove translation)
 *)
 
+type tpN = 
+| ArrowN of tpN * tpN
+| CrossN of tpN * tpN
+| SumN of  tpN * tpN
+| UnitN
+| BoolN
+| NatN
+
+type ntm = 
+| UnitN
+| ZeroN
+| SucN of ntm
+| IsZeroN of ntm
+| LamN of string * tpN * ntm
+| AppN of ntm * ntm
+| PairN of ntm * ntm
+| FstN of ntm
+| SndN of ntm
+| CaseN of ntm * string * ntm * string * ntm
+| InlN of ntm * tpN
+| InlR of ntm * tpN
+
+(* following p 59*)
+(* translation on types *)
+let rec trans_tp (tp:tpN) : tpC = match tp with 
+| ArrowN (t1,t2) -> Arrow (U( trans_tp t1), trans_tp t2)
+| CrossN (t1,t2) -> CCross (trans_tp t1, trans_tp t2)
+| SumN (t1,t2) -> F (Sum (U (trans_tp t1),U (trans_tp t2)))
+| UnitN -> F (Unit)
+| BoolN -> F (Bool)
+| NatN -> F (Nat)
+
+(* translation on terms *)
+let rec trans (t : ntm) : named_tm = match t with 
+| UnitN -> Unit
+| ZeroN -> Zero
+| SucN n -> Succ (trans n)
+| IsZeroN n -> IsZero (trans n)
+| LamN (x,tp, t) -> Lam (x, U (trans_tp tp), trans t )
+| _ -> jksadjdsfkjlksdf
+(*
+| AppN of ntm * ntm
+| PairN of ntm * ntm
+| FstN of ntm
+| SndN of ntm
+| CaseN of ntm * string * ntm * string * ntm
+| InlN of ntm * tpN
+| InlR of ntm * tpN
+*)
