@@ -9,7 +9,7 @@ type tpV =
 | Nat
 | U of tpC    (* U B *)
 | VCross of tpV * tpV  (* A x A' *)
-| Sum of tpV * tpV (* A + A' *)
+| Sum of tpV * tpV (* A + A' *) (* value, so just thunk it as so: thunk (inl (thunk t)) if you want it computation*)
 and 
 tpC = 
 | F of tpV     (* F A *)
@@ -31,8 +31,8 @@ type named_tm =
 | Snd of named_tm (* snd t *)
 | ValPair of named_tm * named_tm (* (v1, v2) *)
 | PMPair of named_tm * string * string * named_tm (* pm t1 as (x, y). t2 *)
-| Inl of named_tm (* inl t *)
-| Inr of named_tm (* inr t *)
+| Inl of named_tm * tpV (* inl t (the other type is a) *)
+| Inr of named_tm * tpV (* inr t *)
 | Case of named_tm * string * named_tm * string * named_tm (* pm V as inl x -> t1 | inl r -> t2 *)
 | Lam of string * tpV * named_tm                (* also called pop *)
 | App of named_tm * named_tm                           (* also called push *)
@@ -62,12 +62,8 @@ let rec typeofV (ctx:ctx) (t : named_tm) : tpV = match t with
     | (Bool, x , y ) -> if x = y then x else raise (TypeError ("branches of if-then-else don't match"))
     | _ -> raise (TypeError ("if then else bad")))
   | Thunk t -> U (typeofC ctx t)
-  | Inl t -> (match typeofV ctx t with 
-    | Sum (a1, a2) -> a1
-    | _ -> raise (TypeError "Inl isnt working:("))
-  | Inr t -> (match typeofV ctx t with 
-    | Sum (a1, a2) -> a2
-    | _ -> raise (TypeError "Inr isnt working:("))
+  | Inl (t , a) -> Sum (typeofV ctx t, a) 
+  | Inr (t, a) -> Sum (a, typeofV ctx t) 
   | Case (t,x,t1,y,t2) -> (match typeofV ctx t with        
     | Sum (a1, a2) -> 
         let (b1,b2) = typeofV ((x, a1)::(List.filter (fun z -> fst z != x ) ctx)) t1, typeofV ((y, a2)::(List.filter (fun z -> fst z != y ) ctx)) t2 in 
@@ -89,20 +85,45 @@ and typeofC  (ctx : ctx) (t : named_tm) : tpC = match t with
   | CompPair (t1, t2) -> (let (x,y) = typeofC ctx t1, typeofC ctx t2 in CCross (x,y))  
   | Fst t -> (match typeofC ctx t with 
       | CCross (x,_) -> x
-      | _ -> raise (TypeError "issue in fst"))
+      | _ -> raise (TypeError "fst needs to be applied to a computation pair"))
   | Snd t -> (match typeofC ctx t with 
       | CCross (_,y) -> y
-      | _ -> raise (TypeError "issue in snd"))
+      | _ -> raise (TypeError "snd needs to be applied to a computation pair"))
   | App (v,t2) -> (match typeofC ctx t with 
       | Arrow (tv,tc) -> if tv = typeofV ctx v then tc else raise (TypeError "arg being passed doesnt match input type")
       | _ -> raise (TypeError "second arg of application needs to be Arrow type"))
   | Bind (t1, x, t2) -> (match typeofC ctx t1 with
-      | F a -> typeofC ((x, a) :: ctx) t2 
+      | F a -> typeofC ((x, a) :: (List.filter (fun z -> fst z != x ) ctx)) t2 
       | _ -> raise (TypeError "supposed to be a force, but it's not"))
   | _ -> raise (TypeError "Supposed to be a computation type but it's  not")
   (* application has arguments in the order A A->B *)
 
+(*
+   
 
+TODO: test typechecker
+
+*)
+let test_typeofC_success (context :ctx) (tm: named_tm) ( tipe : tpC) = 
+  try typeofC context tm = tipe with
+| TypeError _ -> false
+
+let test_typeofC_failure (context :ctx) (tm: named_tm) : string = 
+  try let _ = typeofC context tm in "false" with 
+| TypeError x -> x
+
+let test_typeofV_success (context :ctx) (tm: named_tm) ( tipe : tpV) = 
+  try typeofV context tm = tipe with
+| TypeError _ -> false
+
+let test_typeofV_failure (context :ctx) (tm: named_tm) : string = 
+  try let _ = typeofV context tm in "false" with 
+| TypeError x -> x
+
+let test1 = test_typeofV_success [] (ValPair (True, Zero)) ( VCross (Bool, Nat))
+let test2 =  test_typeofV_success [] (LetIn ("x", True, Var "x")) Bool
+let test3 =  test_typeofV_success [] (PMPair (ValPair (True, Zero), "x", "y", IfThEl (Var "x", Var "y", Zero))) Nat
+let test4 =  test_typeofV_success [] (Inl (Zero, Nat)) (Sum (Bool, Nat))
 
 
 (* interpreter\evaluater: evaluation rules*)
@@ -124,8 +145,8 @@ type tm =
 | Snd of tm (* snd t *)
 | ValPair of tm * tm (* (v1, v2) *)
 | PMPair of tm * tm (* pm t1 as (x, y). t2 *)
-| Inl of tm (* inl t *)
-| Inr of tm (* inr t *)
+| Inl of tm * tpV (* inl t *)
+| Inr of tm * tpV (* inr t *)
 | Case of tm * tm * tm (* pm t as inl x -> t1 | inl r -> t2 *)
 | Lam of tpV * tm                (* also called pop *)
 | App of tm * tm                           (* also called push *)
@@ -156,8 +177,8 @@ let rec debruijnify (context : ctx) (named_term : named_tm) : tm =
   | Snd t -> Snd (debruijnify context t)
   | ValPair (t1, t2) -> ValPair (debruijnify context t1, debruijnify context t2)
   | PMPair (t1, x, y, t2) -> PMPair (debruijnify context t1, debruijnify (y :: (x :: context)) t2) 
-  | Inl t -> Inl (debruijnify context t)
-  | Inr t -> Inr (debruijnify context t)
+  | Inl (t,a) -> Inl (debruijnify context t, a)
+  | Inr (t,a) -> Inr (debruijnify context t, a)
   | Case (t, x, t1, y, t2) -> Case (debruijnify context t, debruijnify (x :: context) t1, debruijnify (y :: context) t2) 
   | Lam (x, tp, t) -> Lam (tp, debruijnify (x :: context) t)              
   | App (t1, t2) -> App (debruijnify context t1, debruijnify context t2)
@@ -166,7 +187,22 @@ let rec debruijnify (context : ctx) (named_term : named_tm) : tm =
   | Force t -> Force (debruijnify context t)
   | Thunk t -> Thunk (debruijnify context t)
 
-(* type environment*)
+
+
+
+(*
+   
+
+TODO: test debruijinfy
+let test_debruijnify () = 
+
+
+*)
+
+
+
+
+
 
 exception Crash
 exception TODO
@@ -186,11 +222,11 @@ let rec shift (c : int) (d : int) (t : tm) : tm = match t with
   | Snd t -> Snd (shift c d t)
   | ValPair (t1, t2) -> ValPair (shift c d t1, shift c d t2)
   | PMPair (t1, t2) -> PMPair (shift c d t1, shift (c + 2) d t2)
-  | Inl t -> Inl (shift c d t)
-  | Inr t -> Inr (shift c d t)
+  | Inl (t,a) -> Inl (shift c d t, a)
+  | Inr (t,a) -> Inr (shift c d t, a)
   | Case (t, t1, t2) -> Case (shift c d t, shift (c + 1) d t1, shift (c + 1) d t2) (* pm t as inl x -> t1 | inl r -> t2 *)
-  | Lam (tp, t) -> Lam (tp, shift (c + 1) d t)            (* also called pop *)
-  | App (t1, t2) -> App (shift c d t1, shift c d t2)                         (* also called push *)
+  | Lam (tp, t) -> Lam (tp, shift (c + 1) d t)          
+  | App (t1, t2) -> App (shift c d t1, shift c d t2)                     
   | Bind (t1, t2) -> Bind (shift c d t1, shift (c + 1) d t2)   (* t1 to x. t2 *)
   | Produce t -> Produce (shift c d t)
   | Force t -> Force (shift c d t)
@@ -211,11 +247,11 @@ let rec subst (s : tm) (j : int) (t : tm) : tm = match t with
   | Snd t -> Snd (subst s j t)
   | ValPair (t1, t2) -> ValPair (subst s j t1, subst s j t2)
   | PMPair (t1, t2) -> PMPair (subst s j t1, subst (shift 0 2 s) (j + 2) t2) (* unsure about this case*)
-  | Inl t -> Inl (subst s j t)
-  | Inr t -> Inr (subst s j t)
+  | Inl (t,a) -> Inl (subst s j t, a)
+  | Inr (t,a) -> Inr (subst s j t, a)
   | Case (t, t1, t2) -> Case (subst s j t, subst (shift 0 1 s) (j + 1) t1, subst (shift 0 1 s) (j + 1) t2) (* pm t as inl x -> t1 | inl r -> t2 *)
-  | Lam (tp, t) -> Lam (tp, subst (shift 0 1 s) (j + 1) t)            (* also called pop *)
-  | App (t1, t2) -> App (subst s j t1, subst s j t2)                         (* also called push *)
+  | Lam (tp, t) -> Lam (tp, subst (shift 0 1 s) (j + 1) t)           
+  | App (t1, t2) -> App (subst s j t1, subst s j t2)                        
   | Bind (t1, t2) -> Bind (subst s j t1, subst (shift 0 1 s) (j + 1) t2)   (* t1 to x. t2 *)
   | Produce t -> Produce (subst s j t)
   | Force t -> Force (subst s j t)
@@ -246,11 +282,11 @@ let rec eval (t : tm) = match t with
     | ValPair (v1, v2) -> let t2' = subst (shift 0 1 v1) 0 t2 in
     subst v2 0 t2' (* make sure this is the right order of shifts *)
     | _ -> raise Crash)
-| Inl t -> Inl t (* is this right? is this guaranteed to be a value? *)
-| Inr t -> Inr t
+| Inl (t,a) -> Inl (eval t, a) (* is this right? is this guaranteed to be a value? hehhehehe my bad i had inl/inr all wrong. it is fixed now*)
+| Inr (t,a) -> Inr (eval t, a)
 | Case (t, t1, t2) -> (match t with
-  | Inl x -> eval (subst x 0 t1)
-  | Inr y -> eval (subst y 0 t2)
+  | Inl (x,a) -> eval (subst x 0 t1)
+  | Inr (y,a) -> eval (subst y 0 t2)
   | _ -> raise Crash
 )
 | Lam (tp, t) -> Lam (tp, t)         
