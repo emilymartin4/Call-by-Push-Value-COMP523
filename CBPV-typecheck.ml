@@ -125,13 +125,20 @@ let test1 = test_typeofV_success [] (ValPair (True, Zero)) ( VCross (Bool, Nat))
 let test2 =  test_typeofC_success [] (LetIn ("x", True, Produce (Var "x"))) (F Bool)
 let test3 =  test_typeofV_success [] (PMPair (ValPair (True, Zero), "x", "y", IfThEl (Var "x", Var "y", Zero))) Nat
 let test4 =  test_typeofV_success [] (Inl (Zero, Bool)) (Sum (Nat, Bool))
-let test5 =  test_typeofC_success [] ( App (True, Lam ("x", Bool, Produce(Var "x")))) (F Bool)
+let test5 =  test_typeofC_success [] (App (True, Lam ("x", Bool, Produce(Var "x")))) (F Bool)
 let test6 =  test_typeofV_success [] (Thunk (Produce (Succ Zero))) (U (F Nat))
 let test7 =  test_typeofC_success [] (Force (Thunk (Produce (Succ Zero)))) (F Nat)
 let test8 =  test_typeofC_success [] (CompPair (Produce True, Force (Thunk (Produce (Succ Zero))))) (CCross (F Bool, F Nat))
+let test9 =   test_typeofC_success [] (Bind (Produce Zero, "x", Produce (Var "x"))) (F Nat)
 
-(* interpreter\evaluater: evaluation rules*)
-(* big step rules on page 45 *)
+let testfail1 = test_typeofV_failure [] (IfThEl (True, False, Succ Zero))
+let testfail2 = test_typeofV_failure [] (Case (True, "x", Succ (Var "x"), "y", Zero))
+let testfail3 = test_typeofV_failure [] (ValPair (True, Lam ("x", Nat, Zero)))
+let testfail4 = test_typeofC_failure [] (App (Zero, Lam ("x", Bool, Produce (Var "x"))))
+let testfail5 = test_typeofV_failure [] (PMPair (True, "x", "y", Succ (Var "x")))
+
+(* add more failure scenarios?! *)
+
 
 
 (* terms with variables labeled using de bruijn indices (nameless representation)*)
@@ -311,5 +318,6 @@ let rec eval (t : tm) = match t with
 
 (* transpiler from CBN to CBPV p277
 Wrap any arguments (things being applied to a lam) in thunks to delay evaluation.
+maybe just define it on paper... (and prove translation)
 *)
 
