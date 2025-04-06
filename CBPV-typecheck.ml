@@ -90,7 +90,7 @@ and typeofC  (ctx : ctx) (t : named_tm) : tpC = match t with
   | Snd t -> (match typeofC ctx t with 
       | CCross (_,y) -> y
       | _ -> raise (TypeError "snd needs to be applied to a computation pair"))
-  | App (v,t2) -> (match typeofC ctx t with 
+  | App (v,t2) -> (match typeofC ctx t2 with 
       | Arrow (tv,tc) -> if tv = typeofV ctx v then tc else raise (TypeError "arg being passed doesnt match input type")
       | _ -> raise (TypeError "second arg of application needs to be Arrow type"))
   | Bind (t1, x, t2) -> (match typeofC ctx t1 with
@@ -122,16 +122,13 @@ let test_typeofV_failure (context :ctx) (tm: named_tm) : string =
 | TypeError x -> x
 
 let test1 = test_typeofV_success [] (ValPair (True, Zero)) ( VCross (Bool, Nat))
-
 let test2 =  test_typeofC_success [] (LetIn ("x", True, Produce (Var "x"))) (F Bool)
 let test3 =  test_typeofV_success [] (PMPair (ValPair (True, Zero), "x", "y", IfThEl (Var "x", Var "y", Zero))) Nat
 let test4 =  test_typeofV_success [] (Inl (Zero, Bool)) (Sum (Nat, Bool))
-(*let test5 =  test_typeofC_success [] ( App (Lam ("x", Bool, Var "x"), True)) (F Bool)
-let test6 =  test_typeofV_success [] (Thunk (Succ Zero)) (U (F Nat))
-let test7 =  test_typeofC_success [] (Force (Thunk (Succ Zero))) ((F Nat))
-let test8 =  test_typeofC_success [] (Lam ("n", Nat, IfThEl (Var "n", Zero, Succ (App (Var "n", Succ Zero))))) (Arrow (Nat, F Nat))
-let test9 =  test_typeofC_success [] ( CompPair (Produce True, Force (Thunk (Succ Zero)))) (CCross (F Bool, F Nat))
-*)
+let test5 =  test_typeofC_success [] ( App (True, Lam ("x", Bool, Produce(Var "x")))) (F Bool)
+let test6 =  test_typeofV_success [] (Thunk (Produce (Succ Zero))) (U (F Nat))
+let test7 =  test_typeofC_success [] (Force (Thunk (Produce (Succ Zero)))) (F Nat)
+let test8 =  test_typeofC_success [] (CompPair (Produce True, Force (Thunk (Produce (Succ Zero))))) (CCross (F Bool, F Nat))
 
 (* interpreter\evaluater: evaluation rules*)
 (* big step rules on page 45 *)
