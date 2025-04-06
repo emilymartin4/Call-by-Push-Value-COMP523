@@ -55,7 +55,8 @@ let rec typeofV (ctx:ctx) (t : named_tm) : tpV = match t with
     | None -> raise (TypeError ("variable " ^ x ^ " is free"))
     | Some x ->  snd x )
   | Unit -> Unit
-  | True | False -> Bool
+  | True -> Bool
+  | False -> Bool
   | Zero -> Nat
   | Succ x -> typeofV ctx x
   | IfThEl (t1, t2, t3) -> (match (typeofV ctx t1, typeofV ctx t2,  typeofV ctx t3) with 
@@ -77,11 +78,11 @@ let rec typeofV (ctx:ctx) (t : named_tm) : tpV = match t with
 
 and typeofC  (ctx : ctx) (t : named_tm) : tpC = match t with
   | Lam (x,a,t) -> Arrow( a, typeofC ((x,a)::(List.filter (fun z -> fst z != x ) ctx)) t)            
-  | LetIn (x, v, t2) -> typeofC ((x, typeofV ctx v) :: (List.filter (fun z -> fst z != x ) ctx)) t2 
+  | LetIn (x, v, c) -> typeofC ((x, typeofV ctx v) ::  ctx) c 
   | Produce t -> F (typeofV ctx t)
   | Force t -> (match typeofV ctx t with 
     | U t' -> t'
-    | _ ->  raise (TypeError ("branches of if-then-else don't match")))
+    | _ -> raise (TypeError ("must force a thunk")))
   | CompPair (t1, t2) -> (let (x,y) = typeofC ctx t1, typeofC ctx t2 in CCross (x,y))  
   | Fst t -> (match typeofC ctx t with 
       | CCross (x,_) -> x
@@ -106,7 +107,7 @@ TODO: test typechecker
 *)
 let test_typeofC_success (context :ctx) (tm: named_tm) ( tipe : tpC) = 
   try typeofC context tm = tipe with
-| TypeError _ -> false
+| TypeError x -> false
 
 let test_typeofC_failure (context :ctx) (tm: named_tm) : string = 
   try let _ = typeofC context tm in "false" with 
@@ -121,10 +122,16 @@ let test_typeofV_failure (context :ctx) (tm: named_tm) : string =
 | TypeError x -> x
 
 let test1 = test_typeofV_success [] (ValPair (True, Zero)) ( VCross (Bool, Nat))
-let test2 =  test_typeofV_success [] (LetIn ("x", True, Var "x")) Bool
-let test3 =  test_typeofV_success [] (PMPair (ValPair (True, Zero), "x", "y", IfThEl (Var "x", Var "y", Zero))) Nat
-let test4 =  test_typeofV_success [] (Inl (Zero, Nat)) (Sum (Bool, Nat))
 
+let test2 =  test_typeofC_success [] (LetIn ("x", True, Produce (Var "x"))) (F Bool)
+let test3 =  test_typeofV_success [] (PMPair (ValPair (True, Zero), "x", "y", IfThEl (Var "x", Var "y", Zero))) Nat
+let test4 =  test_typeofV_success [] (Inl (Zero, Bool)) (Sum (Nat, Bool))
+(*let test5 =  test_typeofC_success [] ( App (Lam ("x", Bool, Var "x"), True)) (F Bool)
+let test6 =  test_typeofV_success [] (Thunk (Succ Zero)) (U (F Nat))
+let test7 =  test_typeofC_success [] (Force (Thunk (Succ Zero))) ((F Nat))
+let test8 =  test_typeofC_success [] (Lam ("n", Nat, IfThEl (Var "n", Zero, Succ (App (Var "n", Succ Zero))))) (Arrow (Nat, F Nat))
+let test9 =  test_typeofC_success [] ( CompPair (Produce True, Force (Thunk (Succ Zero)))) (CCross (F Bool, F Nat))
+*)
 
 (* interpreter\evaluater: evaluation rules*)
 (* big step rules on page 45 *)
