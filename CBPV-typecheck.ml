@@ -172,10 +172,10 @@ type tm =
 | Thunk of tm (* thunk t *)
 
 type name = string
-type ctx = name list
+type ctx_debruijn = name list
 
 (* convert from named representation to nameless representation *)
-let rec debruijnify (context : ctx) (named_term : named_tm) : tm =
+let rec debruijnify (context : ctx_debruijn) (named_term : named_tm) : tm =
   match named_term with
   | Var x ->  (
         match List.find_index (fun y -> x = y) context with
@@ -327,8 +327,7 @@ let rec eval (t : tm) = match t with
 
 
 (* transpiler from CBN to CBPV p277
-Wrap any arguments (things being applied to a lam) in thunks to delay evaluation.
-maybe just define it on paper... (and prove translation)
+   prove translation on paper
 *)
 
 type tpN = 
@@ -337,13 +336,12 @@ type tpN =
 | SumN of  tpN * tpN
 | UnitN
 | BoolN
-| NatN
 
 type ntm = 
 | UnitN
-| ZeroN
-| SucN of ntm
-| IsZeroN of ntm
+| TrueN
+| FalseN
+| VarN of string
 | LamN of string * tpN * ntm
 | AppN of ntm * ntm
 | PairN of ntm * ntm
@@ -352,6 +350,8 @@ type ntm =
 | CaseN of ntm * string * ntm * string * ntm
 | InlN of ntm * tpN
 | InrN of ntm * tpN
+| IfThEl of ntm * ntm * ntm 
+| LetInN of string * ntm * ntm
 
 (* following p 59*)
 (* translation on types *)
@@ -361,21 +361,30 @@ let rec trans_tp (tp:tpN) : tpC = match tp with
 | SumN (t1,t2) -> F (Sum (U (trans_tp t1),U (trans_tp t2)))
 | UnitN -> F (Unit)
 | BoolN -> F (Bool)
-| NatN -> F (Nat)
 
-(* TODO: add let in and if then else ?*)
+(* TODO:  integrate with translation on contexts*)
+
+type ctxN = (string * tpN) list
+let rec trans_ctx (ctx : ctxN): ctx = match ctx with
+| [] -> []
+| (x, tp)::xs -> (x, U (trans_tp tp) ) :: trans_ctx ctx 
+                  (* ^ only value types can be in context so we thunk it. is this ok? *)
+
 
 (* translation on terms *)
 let rec trans (t : ntm) : named_tm = match t with 
-| UnitN -> Unit
-| ZeroN -> Zero
-| SucN n -> Succ (trans n)
-| IsZeroN n -> IsZero (trans n)
+| UnitN -> Produce (Unit)
+| TrueN -> Produce (True)
+| FalseN -> Produce (True)
+| VarN x -> Force (Var x)
 | LamN (x,tp, t) -> Lam (x, U (trans_tp tp), trans t )
 | AppN (t1,t2) -> App (Thunk (trans t1), trans t2)
 | PairN (t1,t2) -> CompPair (trans t1, trans t2)
 | FstN t -> Fst (trans t)
 | SndN t -> Snd (trans t)                 (* make "z" fresh somehow... *)
-| CaseN (t, x, t1, y, t2) -> Bind (trans t, "z",  Case (Var "z" , x, trans t1,y ,trans t2)) 
+| CaseN (t, x, t1, y, t2) -> Bind (trans t, "fresh",  Case (Var "fresh" , x, trans t1,y ,trans t2)) 
 | InlN (t, a) -> Produce (Inl (Thunk (trans t), U (trans_tp a)))
 | InrN (t, a) -> Produce (Inr (Thunk (trans t), U (trans_tp a)))
+| IfThEl (t1,t2,t3) -> Bind (trans t1 , "fresh", IfThEl (Var "fresh", trans t2, trans t3)) (* make "z" fresh somehow... *)
+| LetInN (x, t1, t2) -> LetIn (x, Thunk (trans t1), trans t2)
+(* could we fix the naming issue by using debruijn indicies and shifting? emily help!!*)
