@@ -220,8 +220,8 @@ let test_debruijnify () =
  let test1 = debruijnify [] (PMPair (ValPair (Zero,Unit), "x","y", ValPair (Var "x",Var "y")))in
  let test2 = debruijnify [] (PMPair (ValPair (Thunk (Lam ("x", Nat, Produce (Var "x"))),Zero), "y","z", App(Var "z",Produce ( Var "y"))))in
  let test3 = debruijnify [] (PMPair (ValPair (Thunk (Lam ("x", Nat, Produce (Var "x"))),Zero), "y","z", App(Var "z", (Lam ("a", Nat, Produce (Var "a")))))) in
- test3
-
+  test3
+(* how do i make these test look useful i hate my way of doing this. *)
 
 
 exception Crash
@@ -337,12 +337,13 @@ type tpN =
 | UnitN
 | BoolN
 
+(* uses debruijn *)
 type ntm = 
 | UnitN
 | TrueN
 | FalseN
-| VarN of string
-| LamN of string * tpN * ntm
+| VarN of int
+| LamN of tpN * ntm
 | AppN of ntm * ntm
 | PairN of ntm * ntm
 | FstN of ntm
@@ -370,21 +371,30 @@ let rec trans_ctx (ctx : ctxN): ctx = match ctx with
 | (x, tp)::xs -> (x, U (trans_tp tp) ) :: trans_ctx ctx 
                   (* ^ only value types can be in context so we thunk it. is this ok? *)
 
+let fresh_var (used_names : string list) : string = 
+  (List.fold_left (fun acc -> fun s -> acc ^ s ) ""  used_names) ^ "a"
 
 (* translation on terms *)
-let rec trans (t : ntm) : named_tm = match t with 
+
+
+(* maybe we can parse the program to get the list of used names instead of asking for it in the translation... (otherwise its not general..??)*)
+let rec trans (t : ntm) (used_names: string list) : tm = 
+  (*parse t for all the variable names*)
+  match t with 
 | UnitN -> Produce (Unit)
 | TrueN -> Produce (True)
 | FalseN -> Produce (True)
-| VarN x -> Force (Var x)
-| LamN (x,tp, t) -> Lam (x, U (trans_tp tp), trans t )
-| AppN (t1,t2) -> App (Thunk (trans t1), trans t2)
-| PairN (t1,t2) -> CompPair (trans t1, trans t2)
-| FstN t -> Fst (trans t)
-| SndN t -> Snd (trans t)                 (* make "z" fresh somehow... *)
-| CaseN (t, x, t1, y, t2) -> Bind (trans t, "fresh",  Case (Var "fresh" , x, trans t1,y ,trans t2)) 
-| InlN (t, a) -> Produce (Inl (Thunk (trans t), U (trans_tp a)))
-| InrN (t, a) -> Produce (Inr (Thunk (trans t), U (trans_tp a)))
-| IfThEl (t1,t2,t3) -> Bind (trans t1 , "fresh", IfThEl (Var "fresh", trans t2, trans t3)) (* make "z" fresh somehow... *)
-| LetInN (x, t1, t2) -> LetIn (x, Thunk (trans t1), trans t2)
+| VarN i -> Force (Var i)
+| LamN (tp, t) -> Lam ( U (trans_tp tp), trans t used_names)
+| AppN (t1,t2) -> App (Thunk (trans t1 used_names), trans t2 used_names)
+| PairN (t1,t2) -> CompPair (trans t1 used_names, trans t2 used_names)
+| FstN t -> Fst (trans t used_names) 
+| SndN t -> Snd (trans t used_names)                 (* make a fresh variable somehow... *)
+| CaseN (t, x, t1, y, t2) -> let v = fresh_var used_names in Bind (trans t ( v :: used_names), v,  Case (Var v , x, trans t1 ( v :: used_names) ,y ,trans t2 ( v :: used_names))) 
+| InlN (t, a) -> Produce (Inl (Thunk (trans t used_names), U (trans_tp a)))
+| InrN (t, a) -> Produce (Inr (Thunk (trans t used_names), U (trans_tp a)))
+| IfThEl (t1,t2,t3) -> let v = fresh_var used_names in Bind (trans t1 ( v :: used_names), v, IfThEl (Var v, trans t2 ( v :: used_names), trans t3 ( v :: used_names))) (* make "z" fresh somehow... *)
+| LetInN (x, t1, t2) -> LetIn (Thunk (trans t1 used_names), trans t2 used_names)
+
+
 (* could we fix the naming issue by using debruijn indicies and shifting? emily help!!*)
