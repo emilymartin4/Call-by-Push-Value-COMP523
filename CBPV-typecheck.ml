@@ -363,7 +363,6 @@ let rec trans_tp (tp:tpN) : tpC = match tp with
 | UnitN -> F (Unit)
 | BoolN -> F (Bool)
 
-(* TODO:  integrate with translation on contexts*)
 
 type ctxN = (string * tpN) list
 let rec trans_ctx (ctx : ctxN): ctx = match ctx with
@@ -371,13 +370,7 @@ let rec trans_ctx (ctx : ctxN): ctx = match ctx with
 | (x, tp)::xs -> (x, U (trans_tp tp) ) :: trans_ctx ctx 
                   (* ^ only value types can be in context so we thunk it. is this ok? *)
 
-let fresh_var (used_names : string list) : string = 
-  (List.fold_left (fun acc -> fun s -> acc ^ s ) ""  used_names) ^ "a"
-
 (* translation on terms *)
-
-
-(* maybe we can parse the program to get the list of used names instead of asking for it in the translation... (otherwise its not general..??)*)
 let rec trans (t : ntm) : tm = 
   (*parse t for all the variable names*)
   match t with 
