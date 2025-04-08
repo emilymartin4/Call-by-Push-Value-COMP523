@@ -128,19 +128,17 @@ let test_typeofV_failure (context :ctx) (tm: named_tm) : string =
 
 
 (* test cases for typeofV where the typechecker should succeed *)
-let test_1 = test_typeofV_success [] (PMPair (ValPair (True, False), "x", "y", Var "x")) Bool
-let test_2 = test_typeofV_success [("x", Nat)] (Succ (Var "x")) Nat
-let test_3 = test_typeofV_success [("x", Nat)] (IsZero (Var "x")) Bool
-let test_4 = test_typeofV_success [("x", Bool)] (IfThEl (Var "x", Succ Zero, Succ (Succ Zero))) Nat
-let test_5 = test_typeofV_success [] (Thunk (Lam ("x", Nat, Produce (Succ (Var "x"))))) (U (Arrow (Nat, F Nat)))
-let test_6 = test_typeofV_success [] (Inl (True, Nat)) (Sum (Bool, Nat))
-let test_7 = test_typeofV_success [] (Case (Inl (True, Nat), "x", Var "x", "y", False)) Bool
-let test_8 = test_typeofV_success [] (ValPair (True, False)) (VCross (Bool, Bool))
-let test_9 = test_typeofV_success [("x", Nat)] (PMPair (ValPair (True, False), "x", "y", Var "x")) Bool (* var overwriting *)
-let test_10 = test_typeofV_success [] (ValPair (True, Zero)) (VCross (Bool, Nat))
-let test_11 =  test_typeofV_success [] (PMPair (ValPair (True, Zero), "x", "y", IfThEl (Var "x", Var "y", Zero))) Nat
-let test_12 =  test_typeofV_success [] (Inl (Zero, Bool)) (Sum (Nat, Bool))
-let test_13 =  test_typeofV_success [] (Thunk (Produce (Succ Zero))) (U (F Nat))
+
+let test_1 = test_typeofV_success [("x", Nat)] (Succ (Var "x")) Nat
+let test_2 = test_typeofV_success [("x", Nat)] (IsZero (Var "x")) Bool
+let test_3 = test_typeofV_success [("x", Bool)] (IfThEl (Var "x", Succ Zero, Succ (Succ Zero))) Nat
+let test_4 = test_typeofV_success [] (Thunk (Lam ("x", Nat, Produce (Succ (Var "x"))))) (U (Arrow (Nat, F Nat)))
+let test_5 = test_typeofV_success [] (Inl (True, Nat)) (Sum (Bool, Nat))
+let test_6 = test_typeofV_success [] (Case (Inl (True, Nat), "x", Var "x", "y", False)) Bool
+let test_7 = test_typeofV_success [] (ValPair (True, False)) (VCross (Bool, Bool))
+let test_8 = test_typeofV_success [] (ValPair (True, Zero)) (VCross (Bool, Nat))
+let test_9 =  test_typeofV_success [] (Inl (Zero, Bool)) (Sum (Nat, Bool))
+let test_10 =  test_typeofV_success [] (Thunk (Produce (Succ Zero))) (U (F Nat))
 
 (* test cases for typeofV where the typechecker should fail *)
 let testfail1 = test_typeofV_failure [] (Var "x")
@@ -150,20 +148,22 @@ let testfail4 = test_typeofV_failure [] (IfThEl (Zero, False, Succ Zero))
 let testfail5 = test_typeofV_failure [] (IfThEl (True, False, Produce (Succ Zero)))
 let testfail6 = test_typeofV_failure [] (Case (True, "x", Succ (Var "x"), "y", Zero))
 let testfail7 = test_typeofV_failure [] (Case (Inl (True, Nat), "x", Var "x", "y", Zero))
-let testfail8 = test_typeofV_failure [] (PMPair (True, "x", "y", Zero))
-let testfail9 = test_typeofV_failure [] (Lam ("x", Nat, Produce (Succ (Var "x"))))
+let testfail8 = test_typeofV_failure [] (Lam ("x", Nat, Produce (Succ (Var "x"))))
 
 
 (* test cases for typeofC where the typechecker should succeed *)
-let test1 = test_typeofC_success [] (Lam ("x", Nat, Produce (Succ (Var "x")))) (Arrow (Nat, F Nat))
-let test2 =  test_typeofC_success [] (LetIn ("x", True, Produce (Var "x"))) (F Bool)
-let test3 = test_typeofC_success [] (Produce (Zero)) (F Nat)
-let test4 = test_typeofC_success [] (Force (Thunk (App (Zero, Lam ("x", Nat, Produce (Succ (Var "x"))))))) (F Nat)
-let test5 =  test_typeofC_success [] (Force (Thunk (Produce (Succ Zero)))) (F Nat)
-let test6 =  test_typeofC_success [] (CompPair (Produce True, Force (Thunk (Produce (Succ Zero))))) (CCross (F Bool, F Nat))
-let test7 = test_typeofC_success [] (Fst (CompPair (Lam ("x", Nat, Produce (Succ (Var "x"))), Lam ("x", Nat, Produce (Succ (Var "x")))))) (Arrow (Nat, F Nat))
-let test8 =  test_typeofC_success [] (App (True, Lam ("x", Bool, Produce(Var "x")))) (F Bool)
-let test9 =   test_typeofC_success [] (Bind (Produce Zero, "x", Produce (Var "x"))) (F Nat)
+let test1 =  test_typeofC_success [] (PMPair (ValPair (True, Zero), "x", "y", IfThEl (Var "x", Var "y", Zero))) (F Nat)
+let test2 = test_typeofC_success [("x", Nat)] (PMPair (ValPair (True, False), "x", "y", Var "x")) (F Bool) (* var overwriting *)
+let test3 = test_typeofC_success [] (PMPair (ValPair (True, False), "x", "y", Var "x")) (F Bool)
+let test4 = test_typeofC_success [] (Lam ("x", Nat, Produce (Succ (Var "x")))) (Arrow (Nat, F Nat))
+let test5 =  test_typeofC_success [] (LetIn ("x", True, Produce (Var "x"))) (F Bool)
+let test6 = test_typeofC_success [] (Produce (Zero)) (F Nat)
+let test7 = test_typeofC_success [] (Force (Thunk (App (Zero, Lam ("x", Nat, Produce (Succ (Var "x"))))))) (F Nat)
+let test8 =  test_typeofC_success [] (Force (Thunk (Produce (Succ Zero)))) (F Nat)
+let test9 =  test_typeofC_success [] (CompPair (Produce True, Force (Thunk (Produce (Succ Zero))))) (CCross (F Bool, F Nat))
+let test10 = test_typeofC_success [] (Fst (CompPair (Lam ("x", Nat, Produce (Succ (Var "x"))), Lam ("x", Nat, Produce (Succ (Var "x")))))) (Arrow (Nat, F Nat))
+let test11 =  test_typeofC_success [] (App (True, Lam ("x", Bool, Produce(Var "x")))) (F Bool)
+let test12 =   test_typeofC_success [] (Bind (Produce Zero, "x", Produce (Var "x"))) (F Nat)
 
 
 (* test cases for typeofC where the typechecker should fail *)
@@ -173,6 +173,7 @@ let testfail_3 = test_typeofC_failure [] (App (True, (Lam ("x", Nat, Produce (Su
 let testfail_4 = test_typeofC_failure [] (App (True, Produce False))
 let testfail_5 = test_typeofC_failure [] (Bind (Lam ("y", Nat, Produce (Var "y")), "x", Produce (Var "x")))
 let testfail_6 = test_typeofC_failure [] (Thunk (Lam ("x", Nat, Produce (Var "x"))))
+let testfail_7 = test_typeofC_failure [] (PMPair (True, "x", "y", Produce Zero))
 
 
 
@@ -244,7 +245,7 @@ let test_debruijnify (ctx : ctx_debruijn) (named_term : named_tm) (nameless_term
 let test1_db = test_debruijnify ["x"] (Var "x") (Var 0)
 let test2_db = test_debruijnify ["y"; "x"] (Succ (Var "x")) (Succ (Var 1))
 let test3_db = test_debruijnify [] (LetIn ("x", True, Var "x")) (LetIn (True, Var 0))
-let test4_db = test_debruijnify [] (PMPair (ValPair (Zero, Unit), "x","y", ValPair (Var "x",Var "y"))) (PMPair (ValPair (Zero, Unit), ValPair (Var 1, Var 0)))
+let test4_db = test_debruijnify [] (PMPair (ValPair (Zero, Unit), "x","y", Produce (ValPair (Var "x",Var "y")))) (PMPair (ValPair (Zero, Unit), Produce (ValPair (Var 1, Var 0))))
 let test5_db = test_debruijnify [] (PMPair (ValPair (Thunk (Lam ("x", Nat, Produce (Var "x"))),Zero), "y","z", App(Var "z",Produce (Var "y")))) (PMPair (ValPair (Thunk (Lam (Nat, Produce (Var 0))),Zero), App (Var 0,Produce ( Var 1))))
 let test6_db = test_debruijnify [] (PMPair (ValPair (Thunk (Lam ("x", Nat, Produce (Var "x"))),Zero), "y","z", App(Var "z", (Lam ("a", Nat, Produce (Var "a")))))) (PMPair (ValPair (Thunk (Lam (Nat, Produce (Var 0))),Zero), App(Var 0, (Lam (Nat, Produce (Var 0))))))
 let test7_db = test_debruijnify [] (Case (Inl (True, Bool), "x", Var "x", "y", Var "y")) (Case (Inl (True, Bool), Var 0, Var 0))
@@ -286,7 +287,7 @@ let test_shift (input : tm) (c : int) (d : int) (res : tm) : bool =
 let shift_test_1 = test_shift (Var 0) 0 1 (Var 1)
 let shift_test_2 = test_shift (Succ (Var 0)) 0 1 (Succ (Var 1))
 let shift_test_3 = test_shift (LetIn (Zero, Produce (ValPair (Var 0, Var 1)))) 0 1 (LetIn (Zero, Produce (ValPair (Var 0, Var 2))))
-let shift_test_4 = test_shift (PMPair (ValPair (True, False), ValPair (Var 2, ValPair (Var 0, Var 1)))) 0 1 (PMPair (ValPair (True, False), ValPair (Var 3, ValPair (Var 0, Var 1))))
+let shift_test_4 = test_shift (PMPair (ValPair (True, False), Produce (ValPair (Var 2, ValPair (Var 0, Var 1))))) 0 1 (PMPair (ValPair (True, False), Produce (ValPair (Var 3, ValPair (Var 0, Var 1)))))
 let shift_test_5 = test_shift (Case (Inl (True, Nat), Var 0, Var 1)) 0 1 (Case (Inl (True, Nat), Var 0, Var 2))
 let shift_test_6 = test_shift (Case (Inl (True, Bool), Var 0, Var 0)) 0 1 (Case (Inl (True, Bool), Var 0, Var 0))
 let shift_test_7 = test_shift (Lam (Nat, Succ (Var 0))) 0 1 (Lam (Nat, Succ (Var 0)))
