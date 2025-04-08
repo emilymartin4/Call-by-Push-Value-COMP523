@@ -53,7 +53,7 @@ exception TypeError of string
 (* check inl and inr - they are being used to destruct a sum type instead of construct one <- Emily*)
 let rec typeofV (ctx:ctx) (t : named_tm) : tpV = match t with
   | Var x -> (match find_opt (fun y -> fst y = x ) ctx with 
-    | None -> raise (TypeError ("variable " ^ x ^ " is free"))
+    | None -> raise (TypeError ("Variable " ^ x ^ " is free"))
     | Some x ->  snd x )
   | Unit -> Unit
   | True -> Bool
@@ -62,23 +62,24 @@ let rec typeofV (ctx:ctx) (t : named_tm) : tpV = match t with
   | Succ x -> typeofV ctx x
   | IsZero n -> (match typeofV ctx n with 
     | Nat -> Bool
-    | _ -> raise (TypeError ("iszero must be applied to a nat")))
+    | _ -> raise (TypeError ("IsZero must be applied to something of type Nat")))
   | IfThEl (t1, t2, t3) -> (match (typeofV ctx t1, typeofV ctx t2,  typeofV ctx t3) with 
-    | (Bool, x , y ) -> if x = y then x else raise (TypeError ("branches of if-then-else don't match"))
-    | _ -> raise (TypeError ("if then else bad")))
+    | (Bool, x, y) -> if x = y then x else raise (TypeError ("Types of branches of if-then-else don't match"))
+    | _ -> raise (TypeError ("Either the scrutinee of if-then-else isn't a Bool, or the branches aren't value types")))
   | Thunk t -> U (typeofC ctx t)
-  | Inl (t , a) -> Sum (typeofV ctx t, a) 
+  | Inl (t, a) -> Sum (typeofV ctx t, a) 
   | Inr (t, a) -> Sum (a, typeofV ctx t) 
   | Case (t,x,t1,y,t2) -> (match typeofV ctx t with        
     | Sum (a1, a2) -> 
         let (b1,b2) = typeofV ((x, a1)::(List.filter (fun z -> fst z != x ) ctx)) t1, typeofV ((y, a2)::(List.filter (fun z -> fst z != y ) ctx)) t2 in 
-        if b1 = b2 then b1 else raise (TypeError "branches of sym type destructor don't type check")
-    | _ -> raise (TypeError "Case trying to match on non-sum type")) 
+        if b1 = b2 then b1 else raise (TypeError "Types of branches of case don't match")
+    | _ -> raise (TypeError "Case trying to match on something other than a Sum type")) 
   | ValPair (t1, t2) -> (let (x,y) = typeofV ctx t1, typeofV ctx t2 in VCross (x,y))  
   | PMPair (t1, x, y, t2) -> (match typeofV ctx t1 with 
     | VCross (v1,v2) -> typeofV ([(x, v1);(y, v2)]  @ ctx) t2                             
-    | _ -> raise (TypeError ("match on eager pair bad")))
-  | _ ->  raise (TypeError ("supposed to be a value, but its not"))
+    | _ -> raise (TypeError ("Using PMPair on non-VCross type")))
+  | _ ->  raise (TypeError ("Supposed to be a value, but it isn't"))
+
 
 and typeofC  (ctx : ctx) (t : named_tm) : tpC = match t with
   | Lam (x,a,t) -> Arrow( a, typeofC ((x,a)::(List.filter (fun z -> fst z != x ) ctx)) t)            
@@ -86,21 +87,21 @@ and typeofC  (ctx : ctx) (t : named_tm) : tpC = match t with
   | Produce t -> F (typeofV ctx t)
   | Force t -> (match typeofV ctx t with 
     | U t' -> t'
-    | _ -> raise (TypeError ("must force a thunk")))
+    | _ -> raise (TypeError ("Must force a Thunk")))
   | CompPair (t1, t2) -> (let (x,y) = typeofC ctx t1, typeofC ctx t2 in CCross (x,y))  
   | Fst t -> (match typeofC ctx t with 
       | CCross (x,_) -> x
-      | _ -> raise (TypeError "fst needs to be applied to a computation pair"))
+      | _ -> raise (TypeError "Fst needs to be applied to a computation pair"))
   | Snd t -> (match typeofC ctx t with 
       | CCross (_,y) -> y
-      | _ -> raise (TypeError "snd needs to be applied to a computation pair"))
+      | _ -> raise (TypeError "Snd needs to be applied to a computation pair"))
   | App (v,t2) -> (match typeofC ctx t2 with 
-      | Arrow (tv,tc) -> if tv = typeofV ctx v then tc else raise (TypeError "arg being passed doesnt match input type")
+      | Arrow (tv,tc) -> if tv = typeofV ctx v then tc else raise (TypeError "Argument passed doesn't match function's input type")
       | _ -> raise (TypeError "second arg of application needs to be Arrow type"))
   | Bind (t1, x, t2) -> (match typeofC ctx t1 with
       | F a -> typeofC ((x, a) :: (List.filter (fun z -> fst z != x ) ctx)) t2 
-      | _ -> raise (TypeError "supposed to be a force, but it's not"))
-  | _ -> raise (TypeError "Supposed to be a computation type but it's  not")
+      | _ -> raise (TypeError "Can only bind a Force type"))
+  | _ -> raise (TypeError "Supposed to be a computation type, but it's not")
   (* application has arguments in the order A A->B *)
 
 (*
@@ -109,39 +110,66 @@ and typeofC  (ctx : ctx) (t : named_tm) : tpC = match t with
 TODO: test typechecker
 
 *)
-let test_typeofC_success (context :ctx) (tm: named_tm) ( tipe : tpC) = 
-  try typeofC context tm = tipe with
+let test_typeofC_success (context :ctx) (tm: named_tm) ( ty : tpC) = 
+  try typeofC context tm = ty with
 | TypeError x -> false
 
 let test_typeofC_failure (context :ctx) (tm: named_tm) : string = 
   try let _ = typeofC context tm in "false" with 
 | TypeError x -> x
 
-let test_typeofV_success (context :ctx) (tm: named_tm) ( tipe : tpV) = 
-  try typeofV context tm = tipe with
+let test_typeofV_success (context :ctx) (tm: named_tm) ( ty : tpV) = 
+  try typeofV context tm = ty with
 | TypeError _ -> false
 
 let test_typeofV_failure (context :ctx) (tm: named_tm) : string = 
   try let _ = typeofV context tm in "false" with 
 | TypeError x -> x
 
-let test1 = test_typeofV_success [] (ValPair (True, Zero)) ( VCross (Bool, Nat))
+
+(* test cases for typeofV where the typechecker should succeed *)
+let test_1 = test_typeofV_success [] (PMPair (ValPair (True, False), "x", "y", Var "x")) Bool
+let test_2 = test_typeofV_success [("x", Nat)] (Succ (Var "x")) Nat
+let test_3 = test_typeofV_success [("x", Nat)] (IsZero (Var "x")) Bool
+let test_4 = test_typeofV_success [("x", Bool)] (IfThEl (Var "x", Succ Zero, Succ (Succ Zero))) Nat
+let test_5 = test_typeofV_success [] (Thunk (Lam ("x", Nat, Produce (Succ (Var "x"))))) (U (Arrow (Nat, F Nat)))
+let test_6 = test_typeofV_success [] (Inl (True, Nat)) (Sum (Bool, Nat))
+let test_7 = test_typeofV_success [] (Case (Inl (True, Nat), "x", Var "x", "y", False)) Bool
+let test_8 = test_typeofV_success [] (ValPair (True, False)) (VCross (Bool, Bool))
+let test_9 = test_typeofV_success [("x", Nat)] (PMPair (ValPair (True, False), "x", "y", Var "x")) Bool (* var overwriting *)
+let test_10 = test_typeofV_success [] (ValPair (True, Zero)) (VCross (Bool, Nat))
+let test_11 =  test_typeofV_success [] (PMPair (ValPair (True, Zero), "x", "y", IfThEl (Var "x", Var "y", Zero))) Nat
+let test_12 =  test_typeofV_success [] (Inl (Zero, Bool)) (Sum (Nat, Bool))
+let test_13 =  test_typeofV_success [] (Thunk (Produce (Succ Zero))) (U (F Nat))
+
+(* test cases for typeofV where the typechecker should fail *)
+let testfail1 = test_typeofV_failure [] (Var "x")
+let testfail2 = test_typeofV_failure [] (IsZero (True)) 
+let testfail3 = test_typeofV_failure [] (IfThEl (True, False, Succ Zero))
+let testfail4 = test_typeofV_failure [] (IfThEl (Zero, False, Succ Zero))
+let testfail5 = test_typeofV_failure [] (IfThEl (True, False, Produce (Succ Zero)))
+let testfail6 = test_typeofV_failure [] (Case (True, "x", Succ (Var "x"), "y", Zero))
+let testfail7 = test_typeofV_failure [] (Case (Inl (True, Nat), "x", Var "x", "y", Zero))
+let testfail8 = test_typeofV_failure [] (PMPair (True, "x", "y", Zero))
+let testfail9 = test_typeofV_failure [] (Lam ("x", Nat, Produce (Succ (Var "x"))))
+
+
+(* test cases for typeofC where the typechecker should succeed *)
+
 let test2 =  test_typeofC_success [] (LetIn ("x", True, Produce (Var "x"))) (F Bool)
-let test3 =  test_typeofV_success [] (PMPair (ValPair (True, Zero), "x", "y", IfThEl (Var "x", Var "y", Zero))) Nat
-let test4 =  test_typeofV_success [] (Inl (Zero, Bool)) (Sum (Nat, Bool))
+
 let test5 =  test_typeofC_success [] (App (True, Lam ("x", Bool, Produce(Var "x")))) (F Bool)
-let test6 =  test_typeofV_success [] (Thunk (Produce (Succ Zero))) (U (F Nat))
+
 let test7 =  test_typeofC_success [] (Force (Thunk (Produce (Succ Zero)))) (F Nat)
 let test8 =  test_typeofC_success [] (CompPair (Produce True, Force (Thunk (Produce (Succ Zero))))) (CCross (F Bool, F Nat))
 let test9 =   test_typeofC_success [] (Bind (Produce Zero, "x", Produce (Var "x"))) (F Nat)
 
-let testfail1 = test_typeofV_failure [] (IfThEl (True, False, Succ Zero))
-let testfail2 = test_typeofV_failure [] (Case (True, "x", Succ (Var "x"), "y", Zero))
-let testfail3 = test_typeofV_failure [] (ValPair (True, Lam ("x", Nat, Zero)))
-let testfail4 = test_typeofC_failure [] (App (Zero, Lam ("x", Bool, Produce (Var "x"))))
-let testfail5 = test_typeofV_failure [] (PMPair (True, "x", "y", Succ (Var "x")))
 
-(* add more failure scenarios?! *)
+(* test cases for typeofC where the typechecker should fail *)
+
+let test1_1 = test_typeofC_failure [] (Lam ("x", Nat, Force (Succ (Var "x"))))
+
+
 
 
 
@@ -203,7 +231,6 @@ let rec debruijnify (context : ctx_debruijn) (named_term : named_tm) : tm =
   | Produce t -> Produce (debruijnify context t)
   | Force t -> Force (debruijnify context t)
   | Thunk t -> Thunk (debruijnify context t)
-
 
 
 
