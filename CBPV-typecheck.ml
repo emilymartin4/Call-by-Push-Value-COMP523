@@ -317,8 +317,12 @@ let rec subst (s : tm) (j : int) (t : tm) : tm = match t with
   | Force t -> Force (subst s j t)
   | Thunk t -> Thunk (subst s j t)
 
+let test_subst (input : tm) (s : tm) (index : int) (res : tm) : bool =
+  subst s index input = res
 
-(* BIG PROBLEM IN EVALUATOR - DON'T PROPERLY SHIFT FOR EVAL !!!! *)
+(* ADD TESTS FOR SUBST HERE *)
+let subst_test1 = raise TODO
+
 (* we are gonna do a big step evaluator*)
 let rec eval (t : tm) = match t with
 | Var x -> raise Crash
@@ -351,7 +355,7 @@ let rec eval (t : tm) = match t with
 )
 | Lam (tp, t) -> Lam (tp, t)         
 | App (v, t2) -> (match eval t2 with
-  | Lam (tp, t) -> eval (subst v 0 t) (* how is it guaranteed that v is a value? i guess because it wouldn't have typechecked otherwise? yes i think so. App takes tpV * tpC *)
+  | Lam (tp, t) -> let arg = shift 0 1 v in eval (shift 0 (-1) (subst arg 0 t)) (* how is it guaranteed that v is a value? i guess because it wouldn't have typechecked otherwise? yes i think so. App takes tpV * tpC *)
   | _ -> raise Crash
 )                    (* also called push *)
 | Bind (t1, t2) -> (match eval t1 with
