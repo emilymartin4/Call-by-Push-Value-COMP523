@@ -332,8 +332,14 @@ let rec eval (t : tm) = match t with
 | False -> False
 | Zero -> Zero
 | Succ t -> Succ (eval t)
-| IsZero t -> IsZero (eval t)
-| IfThEl (t1, t2, t3) -> IfThEl (eval t1, eval t2, eval t3)
+| IsZero t -> (match eval t with 
+  | Zero -> True 
+  | Succ n -> False 
+  | _ -> raise Crash )
+| IfThEl (t1, t2, t3) -> (match eval t1 with 
+  | True -> eval t2
+  | False -> eval t3
+  | _ -> raise Crash )
 | LetIn (v, t2) -> eval (subst v 0 t2)
 | CompPair (t1, t2) -> CompPair (t1, t2) (* is this right ??  yeah i think its a value*)
 | Fst t -> (match eval t with
@@ -365,9 +371,42 @@ let rec eval (t : tm) = match t with
 )
 | Produce v -> Produce v
 | Force t -> (match eval t with
-  | Thunk t1 -> t1
+  | Thunk t1 -> eval t1       (* this was a mistake and i fixed it :) *)
   | _ -> raise Crash)
 | Thunk t -> Thunk t
+
+
+let test_eval_success t goal : bool = 
+  try eval t = goal  with
+| Crash -> false
+
+let test_eval_failure t : bool = 
+  try eval t; false with 
+| Crash -> true
+
+let testeval1 = test_eval_success (Succ (Succ Zero)) (Succ (Succ Zero)) 
+let testeval2 = test_eval_success (IsZero (Succ Zero)) False
+let testeval3 = test_eval_success (IfThEl (False, Succ Zero, Zero)) Zero
+let testeval4 = test_eval_success (App (Succ Zero, Lam ( Nat, Succ (Var 0)))) (Succ (Succ Zero)) 
+let testeval5 = test_eval_success (LetIn ( Succ Zero, Succ (Var 0))) (Succ (Succ Zero)) 
+
+let testeval6 = test_eval_success (Case (Inr (Zero, Nat), Succ (Var 0), Var 0)) Zero 
+let testeval7 = test_eval_success (Case (Inl (True, Bool), Var 0, Zero)) True
+let testeval8 = test_eval_success (Fst (CompPair (Succ Zero, False))) (Succ Zero)
+let testeval9 = test_eval_success (Force (Thunk (IsZero Zero))) True
+
+let testeval10 = test_eval_success (LetIn ( Succ Zero, LetIn ( Succ (Var 1), Var 0))) (Succ (Succ Zero)) 
+let testeval11 = test_eval_failure (IsZero True)
+let testeval12 = test_eval_failure (IfThEl (Zero, Zero, False))
+let testeval13 = test_eval_failure (Var 0)
+let testeval14 = test_eval_success (App (Zero, Lam ( Nat, Succ (Var 0)))) (Succ Zero)
+let testeval15 = test_eval_success (Force (Thunk (Succ Zero))) (Succ Zero)
+let testeval16 = test_eval_success (PMPair (ValPair (True, False), Var 1)) False
+let testeval17 = test_eval_success (Case (Inl (True, Bool), Var 0, Var 0)) True
+let testeval18 = test_eval_failure (App (True, Lam ( Nat, Succ (Var 0))))
+let testeval19 = test_eval_failure (Force True)
+let testeval20 = test_eval_success (Force (Produce (Succ Zero))) (Succ Zero)
+let testeval21 = test_eval_failure (Case (Zero, Var 0, Zero))
 
 
 (* transpiler from CBN to CBPV p277
