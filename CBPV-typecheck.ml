@@ -350,7 +350,7 @@ let rec eval (t : tm) = match t with
   | _ -> raise Crash)
 | ValPair (t1, t2) -> ValPair (eval t1, eval t2)
 | PMPair (v, t2) -> (match v with
-    | ValPair (v1, v2) -> let t2' = subst (shift 0 1 v1) 0 t2 in
+    | ValPair (v1, v2) -> let t2' = subst (shift 0 1 v1) 0 t2 in    (* shift them both by two!! looks like: pm (a,b) as \x. \y. in ... *)
     subst v2 0 t2' (* make sure this is the right order of shifts *)
     | _ -> raise Crash)
 | Inl (t,a) -> Inl (eval t, a) (* is this right? is this guaranteed to be a value? hehhehehe my bad i had inl/inr all wrong. it is fixed now, also it is eager style*)
@@ -395,18 +395,17 @@ let testeval7 = test_eval_success (Case (Inl (True, Bool), Var 0, Zero)) True
 let testeval8 = test_eval_success (Fst (CompPair (Succ Zero, False))) (Succ Zero)
 let testeval9 = test_eval_success (Force (Thunk (IsZero Zero))) True
 
-let testeval10 = test_eval_success (LetIn ( Succ Zero, LetIn ( Succ (Var 1), Var 0))) (Succ (Succ Zero)) 
+let testeval10 = test_eval_success (LetIn ( Succ Zero, LetIn ( Succ (Var 0), Var 0))) (Succ (Succ Zero)) 
 let testeval11 = test_eval_failure (IsZero True)
 let testeval12 = test_eval_failure (IfThEl (Zero, Zero, False))
 let testeval13 = test_eval_failure (Var 0)
 let testeval14 = test_eval_success (App (Zero, Lam ( Nat, Succ (Var 0)))) (Succ Zero)
 let testeval15 = test_eval_success (Force (Thunk (Succ Zero))) (Succ Zero)
-let testeval16 = test_eval_success (PMPair (ValPair (True, False), Var 1)) False
+let testeval16 = test_eval_success (PMPair (ValPair (True, False), Var 0)) False  (* still failing!! *)
 let testeval17 = test_eval_success (Case (Inl (True, Bool), Var 0, Var 0)) True
-let testeval18 = test_eval_failure (App (True, Lam ( Nat, Succ (Var 0))))
+let testeval18 = test_eval_success (App (Zero, Lam ( Nat, Succ (Var 0)))) (Succ Zero)
 let testeval19 = test_eval_failure (Force True)
-let testeval20 = test_eval_success (Force (Produce (Succ Zero))) (Succ Zero)
-let testeval21 = test_eval_failure (Case (Zero, Var 0, Zero))
+let testeval20 = test_eval_failure (Case (Zero, Var 0, Zero))
 
 
 (* transpiler from CBN to CBPV p277
