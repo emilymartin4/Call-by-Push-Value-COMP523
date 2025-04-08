@@ -104,12 +104,7 @@ and typeofC  (ctx : ctx) (t : named_tm) : tpC = match t with
   | _ -> raise (TypeError "Supposed to be a computation type, but it's not")
   (* application has arguments in the order A A->B *)
 
-(*
-   
 
-TODO: test typechecker
-
-*)
 let test_typeofC_success (context :ctx) (tm: named_tm) ( ty : tpC) = 
   try typeofC context tm = ty with
 | TypeError x -> false
@@ -128,7 +123,6 @@ let test_typeofV_failure (context :ctx) (tm: named_tm) : string =
 
 
 (* test cases for typeofV where the typechecker should succeed *)
-
 let test_1 = test_typeofV_success [("x", Nat)] (Succ (Var "x")) Nat
 let test_2 = test_typeofV_success [("x", Nat)] (IsZero (Var "x")) Bool
 let test_3 = test_typeofV_success [("x", Bool)] (IfThEl (Var "x", Succ Zero, Succ (Succ Zero))) Nat
@@ -292,6 +286,7 @@ let shift_test_5 = test_shift (Case (Inl (True, Nat), Var 0, Var 1)) 0 1 (Case (
 let shift_test_6 = test_shift (Case (Inl (True, Bool), Var 0, Var 0)) 0 1 (Case (Inl (True, Bool), Var 0, Var 0))
 let shift_test_7 = test_shift (Lam (Nat, Succ (Var 0))) 0 1 (Lam (Nat, Succ (Var 0)))
 let shift_test_8 = test_shift (Bind (Produce Zero, Produce (Var 0))) 0 1 (Bind (Produce Zero, Produce (Var 0)))
+
 (* substitute a term s for the variable j in t *)
 let rec subst (s : tm) (j : int) (t : tm) : tm = match t with
   | Var x -> if x = j then s else Var x
@@ -318,11 +313,16 @@ let rec subst (s : tm) (j : int) (t : tm) : tm = match t with
   | Force t -> Force (subst s j t)
   | Thunk t -> Thunk (subst s j t)
 
-let test_subst (input : tm) (s : tm) (index : int) (res : tm) : bool =
-  subst s index input = res
-
-(* ADD TESTS FOR SUBST HERE *)
-let subst_test1 = raise TODO
+let subst_test1 = subst (Var 1) 0 (Var 0) = Var 1
+let subst_test2 = subst (Var 1) 0 (Succ (Var 0)) = Succ (Var 1)
+let subst_test3 = subst (Var 2) 0 (IfThEl (Var 0, Var 1, Var 0)) = IfThEl (Var 2, Var 1, Var 2)
+let subst_test4 = subst (Var 2) 0 (Succ (Succ (Var 0))) = Succ (Succ (Var 2))
+let subst_test5 = subst (Var 2) 0 (LetIn (Var 0, Var 0)) = LetIn (Var 2, Var 0)
+let subst_test6 = subst (Var 2) 0 (PMPair (Var 0, Var 1)) = PMPair (Var 2, Var 1)
+let subst_test7 = subst (Var 2) 0 (Case (Var 0, Var 1, Var 2)) = Case (Var 2, Var 3, Var 2)
+let subst_test8 = subst (Var 1) 0 (Var 2) = Var 2
+let subst_test9 = subst (Var 2) 0 (Lam (Nat, Var 0)) = Lam (Nat, Var 0)
+let subst_test10 = subst (Var 2) 0 (Force (Var 0)) = Force (Var 2)
 
 (* we are gonna do a big step evaluator*)
 let rec eval (t : tm) = match t with
@@ -342,7 +342,7 @@ let rec eval (t : tm) = match t with
 | Snd t -> (match eval t with
   | CompPair (n1, n2) -> eval n2
   | _ -> raise Crash)
-| ValPair (t1, t2) -> ValPair (t1, t2)
+| ValPair (t1, t2) -> ValPair (eval t1, eval t2)
 | PMPair (v, t2) -> (match v with
     | ValPair (v1, v2) -> let t2' = subst (shift 0 1 v1) 0 t2 in
     subst v2 0 t2' (* make sure this is the right order of shifts *)
