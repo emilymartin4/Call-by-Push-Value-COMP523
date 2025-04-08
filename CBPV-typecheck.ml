@@ -100,7 +100,7 @@ and typeofC  (ctx : ctx) (t : named_tm) : tpC = match t with
       | _ -> raise (TypeError "Second arg of application needs to be Arrow type"))
   | Bind (t1, x, t2) -> (match typeofC ctx t1 with
       | F a -> typeofC ((x, a) :: (List.filter (fun z -> fst z != x ) ctx)) t2 
-      | _ -> raise (TypeError "Can only bind a Force type"))
+      | _ -> raise (TypeError "Can only bind something of the form F A"))
   | _ -> raise (TypeError "Supposed to be a computation type, but it's not")
   (* application has arguments in the order A A->B *)
 
@@ -155,13 +155,14 @@ let testfail9 = test_typeofV_failure [] (Lam ("x", Nat, Produce (Succ (Var "x"))
 
 
 (* test cases for typeofC where the typechecker should succeed *)
-
+let test1 = test_typeofC_success [] (Lam ("x", Nat, Produce (Succ (Var "x")))) (Arrow (Nat, F Nat))
 let test2 =  test_typeofC_success [] (LetIn ("x", True, Produce (Var "x"))) (F Bool)
-
-let test5 =  test_typeofC_success [] (App (True, Lam ("x", Bool, Produce(Var "x")))) (F Bool)
-
-let test7 =  test_typeofC_success [] (Force (Thunk (Produce (Succ Zero)))) (F Nat)
-let test8 =  test_typeofC_success [] (CompPair (Produce True, Force (Thunk (Produce (Succ Zero))))) (CCross (F Bool, F Nat))
+let test3 = test_typeofC_success [] (Produce (Zero)) (F Nat)
+let test4 = test_typeofC_success [] (Force (Thunk (App (Zero, Lam ("x", Nat, Produce (Succ (Var "x"))))))) (F Nat)
+let test5 =  test_typeofC_success [] (Force (Thunk (Produce (Succ Zero)))) (F Nat)
+let test6 =  test_typeofC_success [] (CompPair (Produce True, Force (Thunk (Produce (Succ Zero))))) (CCross (F Bool, F Nat))
+let test7 = test_typeofC_success [] (Fst (CompPair (Lam ("x", Nat, Produce (Succ (Var "x"))), Lam ("x", Nat, Produce (Succ (Var "x")))))) (Arrow (Nat, F Nat))
+let test8 =  test_typeofC_success [] (App (True, Lam ("x", Bool, Produce(Var "x")))) (F Bool)
 let test9 =   test_typeofC_success [] (Bind (Produce Zero, "x", Produce (Var "x"))) (F Nat)
 
 
@@ -170,7 +171,8 @@ let testfail_1 = test_typeofC_failure [] (Lam ("x", Nat, Force (Succ (Var "x")))
 let testfail_2 = test_typeofC_failure [] (Fst (ValPair (True, False)))
 let testfail_3 = test_typeofC_failure [] (App (True, (Lam ("x", Nat, Produce (Succ (Var "x"))))))
 let testfail_4 = test_typeofC_failure [] (App (True, Produce False))
-(* add failure case for bind here (bind something not a force type) *)
+let testfail_5 = test_typeofC_failure [] (Bind (Lam ("y", Nat, Produce (Var "y")), "x", Produce (Var "x")))
+let testfail_6 = test_typeofC_failure [] (Thunk (Lam ("x", Nat, Produce (Var "x"))))
 
 
 
