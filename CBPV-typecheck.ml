@@ -75,9 +75,6 @@ let rec typeofV (ctx:ctx) (t : named_tm) : tpV = match t with
         if b1 = b2 then b1 else raise (TypeError "Types of branches of case don't match")
     | _ -> raise (TypeError "Case trying to match on something other than a Sum type")) 
   | ValPair (t1, t2) -> (let (x,y) = typeofV ctx t1, typeofV ctx t2 in VCross (x,y))  
-  | PMPair (t1, x, y, t2) -> (match typeofV ctx t1 with 
-    | VCross (v1,v2) -> typeofV ([(x, v1);(y, v2)]  @ ctx) t2                             
-    | _ -> raise (TypeError ("Using PMPair on non-VCross type")))
   | _ ->  raise (TypeError ("Supposed to be a value, but it isn't"))
 
 
@@ -88,7 +85,10 @@ and typeofC  (ctx : ctx) (t : named_tm) : tpC = match t with
   | Force t -> (match typeofV ctx t with 
     | U t' -> t'
     | _ -> raise (TypeError ("Must force a Thunk")))
-  | CompPair (t1, t2) -> (let (x,y) = typeofC ctx t1, typeofC ctx t2 in CCross (x,y))  
+  | CompPair (t1, t2) -> (let (x,y) = typeofC ctx t1, typeofC ctx t2 in CCross (x,y)) 
+  | PMPair (t1, x, y, t2) -> (match typeofV ctx t1 with 
+    | VCross (v1,v2) -> typeofC ([(x, v1);(y, v2)]  @ ctx) t2                             
+    | _ -> raise (TypeError ("Using PMPair on non-VCross type"))) 
   | Fst t -> (match typeofC ctx t with 
       | CCross (x,_) -> x
       | _ -> raise (TypeError "Fst needs to be applied to a computation pair"))
@@ -425,12 +425,10 @@ let rec trans (t : ntm) : tm =
 | AppN (t1,t2) -> App (Thunk (trans t1), trans t2)
 | PairN (t1,t2) -> CompPair (trans t1, trans t2)
 | FstN t -> Fst (trans t) 
-| SndN t -> Snd (trans t)                 (* make a fresh variable somehow... *)
+| SndN t -> Snd (trans t)                
 | CaseN (t, x, t1, y, t2) -> Bind (trans t , Case (Var 0 ,  (shift 0 1 (trans t1)) , (shift 0 1 (trans t2)) )) 
 | InlN (t, a) -> Produce (Inl (Thunk (trans t), U (trans_tp a)))
 | InrN (t, a) -> Produce (Inr (Thunk (trans t ), U (trans_tp a)))
 | IfThEl (t1,t2,t3) -> Bind ( shift 0 1 (trans t1), IfThEl (Var 0,  (shift 0 1 (trans t2)),  (shift 0 1 (trans t3)) ))
 | LetInN (x, t1, t2) -> LetIn (Thunk (trans t1), trans t2)
 
-
-(* could we fix the naming issue by using debruijn indicies and shifting? emily help!!*)
