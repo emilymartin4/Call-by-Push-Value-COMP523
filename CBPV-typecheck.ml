@@ -237,23 +237,19 @@ let rec debruijnify (context : ctx_debruijn) (named_term : named_tm) : tm =
   | Thunk t -> Thunk (debruijnify context t)
 
 
-
-(*
-   
-TODO: test debruijinfy
-let test_debruijnify () = 
-PMPair (VarPair (Zero,Unit), "x","y", VarPair (Var "x",Var "y"))
-
-*)
+let test_debruijnify (ctx : ctx_debruijn) (named_term : named_tm) (nameless_term : tm) : bool =
+  debruijnify ctx named_term = nameless_term
 
 (* add more of these *)
-let test_debruijnify () = 
- let test1 = debruijnify [] (PMPair (ValPair (Zero,Unit), "x","y", ValPair (Var "x",Var "y")))in
- let test2 = debruijnify [] (PMPair (ValPair (Thunk (Lam ("x", Nat, Produce (Var "x"))),Zero), "y","z", App(Var "z",Produce ( Var "y"))))in
- let test3 = debruijnify [] (PMPair (ValPair (Thunk (Lam ("x", Nat, Produce (Var "x"))),Zero), "y","z", App(Var "z", (Lam ("a", Nat, Produce (Var "a")))))) in
-  test3
-(* how do i make these test look useful i hate my way of doing this. *)
-
+let test1_db = test_debruijnify ["x"] (Var "x") (Var 0)
+let test2_db = test_debruijnify ["y"; "x"] (Succ (Var "x")) (Succ (Var 1))
+let test3_db = test_debruijnify [] (LetIn ("x", True, Var "x")) (LetIn (True, Var 0))
+let test4_db = test_debruijnify [] (PMPair (ValPair (Zero, Unit), "x","y", ValPair (Var "x",Var "y"))) (PMPair (ValPair (Zero, Unit), ValPair (Var 1, Var 0)))
+let test5_db = test_debruijnify [] (PMPair (ValPair (Thunk (Lam ("x", Nat, Produce (Var "x"))),Zero), "y","z", App(Var "z",Produce (Var "y")))) (PMPair (ValPair (Thunk (Lam (Nat, Produce (Var 0))),Zero), App (Var 0,Produce ( Var 1))))
+let test6_db = test_debruijnify [] (PMPair (ValPair (Thunk (Lam ("x", Nat, Produce (Var "x"))),Zero), "y","z", App(Var "z", (Lam ("a", Nat, Produce (Var "a")))))) (PMPair (ValPair (Thunk (Lam (Nat, Produce (Var 0))),Zero), App(Var 0, (Lam (Nat, Produce (Var 0))))))
+let test7_db = test_debruijnify [] (Case (Inl (True, Bool), "x", Var "x", "y", Var "y")) (Case (Inl (True, Bool), Var 0, Var 0))
+let test8_db = test_debruijnify ["y"; "z"] (Lam ("x", Nat, Produce (Succ (Var "x")))) (Lam (Nat, Produce (Succ (Var 0))))
+let test9_db = test_debruijnify [] (Bind (Produce Zero, "x", Produce (Var "x"))) (Bind (Produce Zero, Produce (Var 0)))
 
 exception Crash
 exception TODO
