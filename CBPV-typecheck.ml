@@ -97,7 +97,7 @@ and typeofC  (ctx : ctx) (t : named_tm) : tpC = match t with
       | _ -> raise (TypeError "Snd needs to be applied to a computation pair"))
   | App (v,t2) -> (match typeofC ctx t2 with 
       | Arrow (tv,tc) -> if tv = typeofV ctx v then tc else raise (TypeError "Argument passed doesn't match function's input type")
-      | _ -> raise (TypeError "second arg of application needs to be Arrow type"))
+      | _ -> raise (TypeError "Second arg of application needs to be Arrow type"))
   | Bind (t1, x, t2) -> (match typeofC ctx t1 with
       | F a -> typeofC ((x, a) :: (List.filter (fun z -> fst z != x ) ctx)) t2 
       | _ -> raise (TypeError "Can only bind a Force type"))
@@ -166,9 +166,11 @@ let test9 =   test_typeofC_success [] (Bind (Produce Zero, "x", Produce (Var "x"
 
 
 (* test cases for typeofC where the typechecker should fail *)
-
-let test1_1 = test_typeofC_failure [] (Lam ("x", Nat, Force (Succ (Var "x"))))
-
+let testfail_1 = test_typeofC_failure [] (Lam ("x", Nat, Force (Succ (Var "x"))))
+let testfail_2 = test_typeofC_failure [] (Fst (ValPair (True, False)))
+let testfail_3 = test_typeofC_failure [] (App (True, (Lam ("x", Nat, Produce (Succ (Var "x"))))))
+let testfail_4 = test_typeofC_failure [] (App (True, Produce False))
+(* add failure case for bind here (bind something not a force type) *)
 
 
 
