@@ -251,6 +251,7 @@ let test7_db = test_debruijnify [] (Case (Inl (True, Bool), "x", Var "x", "y", V
 let test8_db = test_debruijnify ["y"; "z"] (Lam ("x", Nat, Produce (Succ (Var "x")))) (Lam (Nat, Produce (Succ (Var 0))))
 let test9_db = test_debruijnify [] (Bind (Produce Zero, "x", Produce (Var "x"))) (Bind (Produce Zero, Produce (Var 0)))
 
+(*testing*)
 exception Crash
 exception TODO
 
