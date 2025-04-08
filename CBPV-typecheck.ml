@@ -251,7 +251,6 @@ let test7_db = test_debruijnify [] (Case (Inl (True, Bool), "x", Var "x", "y", V
 let test8_db = test_debruijnify ["y"; "z"] (Lam ("x", Nat, Produce (Succ (Var "x")))) (Lam (Nat, Produce (Succ (Var 0))))
 let test9_db = test_debruijnify [] (Bind (Produce Zero, "x", Produce (Var "x"))) (Bind (Produce Zero, Produce (Var 0)))
 
-(*testing*)
 exception Crash
 exception TODO
 
@@ -281,6 +280,17 @@ let rec shift (c : int) (d : int) (t : tm) : tm = match t with
   | Force t -> Force (shift c d t)
   | Thunk t -> Thunk (shift c d t)
 
+let test_shift (input : tm) (c : int) (d : int) (res : tm) : bool = 
+  shift c d input = res
+
+let shift_test_1 = test_shift (Var 0) 0 1 (Var 1)
+let shift_test_2 = test_shift (Succ (Var 0)) 0 1 (Succ (Var 1))
+let shift_test_3 = test_shift (LetIn (Zero, Produce (ValPair (Var 0, Var 1)))) 0 1 (LetIn (Zero, Produce (ValPair (Var 0, Var 2))))
+let shift_test_4 = test_shift (PMPair (ValPair (True, False), ValPair (Var 2, ValPair (Var 0, Var 1)))) 0 1 (PMPair (ValPair (True, False), ValPair (Var 3, ValPair (Var 0, Var 1))))
+let shift_test_5 = test_shift (Case (Inl (True, Nat), Var 0, Var 1)) 0 1 (Case (Inl (True, Nat), Var 0, Var 2))
+let shift_test_6 = test_shift (Case (Inl (True, Bool), Var 0, Var 0)) 0 1 (Case (Inl (True, Bool), Var 0, Var 0))
+let shift_test_7 = test_shift (Lam (Nat, Succ (Var 0))) 0 1 (Lam (Nat, Succ (Var 0)))
+let shift_test_8 = test_shift (Bind (Produce Zero, Produce (Var 0))) 0 1 (Bind (Produce Zero, Produce (Var 0)))
 (* substitute a term s for the variable j in t *)
 let rec subst (s : tm) (j : int) (t : tm) : tm = match t with
   | Var x -> if x = j then s else Var x
@@ -308,6 +318,7 @@ let rec subst (s : tm) (j : int) (t : tm) : tm = match t with
   | Thunk t -> Thunk (subst s j t)
 
 
+(* BIG PROBLEM IN EVALUATOR - DON'T PROPERLY SHIFT FOR EVAL !!!! *)
 (* we are gonna do a big step evaluator*)
 let rec eval (t : tm) = match t with
 | Var x -> raise Crash
