@@ -450,7 +450,7 @@ type ctxN = (string * tpN) list
 let rec trans_ctx (ctx : ctxN): ctx = match ctx with
 | [] -> []
 | (x, tp)::xs -> (x, U (trans_tp tp) ) :: trans_ctx ctx 
-                  (* ^ only value types can be in context so we thunk it. is this ok? *)
+                  (* ^ only value types can be in context so we thunk it. levy says this on 56 *)
 
 (* translation on terms *)
 let rec trans (t : ntm) : tm = 
@@ -471,3 +471,4 @@ let rec trans (t : ntm) : tm =
 | IfThEl (t1,t2,t3) -> Bind ( shift 0 1 (trans t1), IfThEl (Var 0,  (shift 0 1 (trans t2)),  (shift 0 1 (trans t3)) ))
 | LetInN (x, t1, t2) -> LetIn (Thunk (trans t1), trans t2)
 
+(*for proof do true, pair, app, lam, case (easiest ot hardest)  *)
