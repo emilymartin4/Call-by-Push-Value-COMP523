@@ -69,16 +69,11 @@ let rec typeofV (ctx:ctx) (t : named_tm) : tpV = match t with
   | Thunk t -> U (typeofC ctx t)
   | Inl (t, a) -> Sum (typeofV ctx t, a) 
   | Inr (t, a) -> Sum (a, typeofV ctx t) 
-  | Case (t,x,t1,y,t2) -> (match typeofV ctx t with        
-    | Sum (a1, a2) -> 
-        let (b1,b2) = typeofV ((x, a1)::(List.filter (fun z -> fst z != x ) ctx)) t1, typeofV ((y, a2)::(List.filter (fun z -> fst z != y ) ctx)) t2 in 
-        if b1 = b2 then b1 else raise (TypeError "Types of branches of case don't match")
-    | _ -> raise (TypeError "Case trying to match on something other than a Sum type")) 
   | ValPair (t1, t2) -> (let (x,y) = typeofV ctx t1, typeofV ctx t2 in VCross (x,y))  
   | _ ->  raise (TypeError ("Supposed to be a value, but it isn't"))
 
 
-and typeofC  (ctx : ctx) (t : named_tm) : tpC = match t with
+and typeofC (ctx : ctx) (t : named_tm) : tpC = match t with
   | Lam (x,a,t) -> Arrow( a, typeofC ((x,a)::(List.filter (fun z -> fst z != x ) ctx)) t)            
   | LetIn (x, v, c) -> typeofC ((x, typeofV ctx v) ::  ctx) c 
   | Produce t -> F (typeofV ctx t)
@@ -95,7 +90,13 @@ and typeofC  (ctx : ctx) (t : named_tm) : tpC = match t with
   | Snd t -> (match typeofC ctx t with 
       | CCross (_,y) -> y
       | _ -> raise (TypeError "Snd needs to be applied to a computation pair"))
-  | App (v,t2) -> (match typeofC ctx t2 with 
+  | Case (t,x,t1,y,t2) -> (match typeofV ctx t with        
+      | Sum (a1, a2) -> 
+          let (b1,b2) = typeofC ((x, a1)::(List.filter (fun z -> fst z != x ) ctx)) t1, typeofC ((y, a2)::(List.filter (fun z -> fst z != y ) ctx)) t2 in 
+          if b1 = b2 then b1 else raise (TypeError "Types of branches of case don't match")
+      | _ -> raise (TypeError "Case trying to match on something other than a Sum type")) 
+    
+      | App (v,t2) -> (match typeofC ctx t2 with 
       | Arrow (tv,tc) -> if tv = typeofV ctx v then tc else raise (TypeError "Argument passed doesn't match function's input type")
       | _ -> raise (TypeError "Second arg of application needs to be Arrow type"))
   | Bind (t1, x, t2) -> (match typeofC ctx t1 with
