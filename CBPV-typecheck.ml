@@ -129,7 +129,6 @@ let test_2 = test_typeofV_success [("x", Nat)] (IsZero (Var "x")) Bool
 let test_3 = test_typeofV_success [("x", Bool)] (IfThEl (Var "x", Succ Zero, Succ (Succ Zero))) Nat
 let test_4 = test_typeofV_success [] (Thunk (Lam ("x", Nat, Produce (Succ (Var "x"))))) (U (Arrow (Nat, F Nat)))
 let test_5 = test_typeofV_success [] (Inl (True, Nat)) (Sum (Bool, Nat))
-let test_6 = test_typeofV_success [] (Case (Inl (True, Nat), "x", Var "x", "y", False)) Bool
 let test_7 = test_typeofV_success [] (ValPair (True, False)) (VCross (Bool, Bool))
 let test_8 = test_typeofV_success [] (ValPair (True, Zero)) (VCross (Bool, Nat))
 let test_9 =  test_typeofV_success [] (Inl (Zero, Bool)) (Sum (Nat, Bool))
@@ -141,8 +140,6 @@ let testfail2 = test_typeofV_failure [] (IsZero (True))
 let testfail3 = test_typeofV_failure [] (IfThEl (True, False, Succ Zero))
 let testfail4 = test_typeofV_failure [] (IfThEl (Zero, False, Succ Zero))
 let testfail5 = test_typeofV_failure [] (IfThEl (True, False, Produce (Succ Zero)))
-let testfail6 = test_typeofV_failure [] (Case (True, "x", Succ (Var "x"), "y", Zero))
-let testfail7 = test_typeofV_failure [] (Case (Inl (True, Nat), "x", Var "x", "y", Zero))
 let testfail8 = test_typeofV_failure [] (Lam ("x", Nat, Produce (Succ (Var "x"))))
 
 
@@ -158,7 +155,8 @@ let test8 =  test_typeofC_success [] (Force (Thunk (Produce (Succ Zero)))) (F Na
 let test9 =  test_typeofC_success [] (CompPair (Produce True, Force (Thunk (Produce (Succ Zero))))) (CCross (F Bool, F Nat))
 let test10 = test_typeofC_success [] (Fst (CompPair (Lam ("x", Nat, Produce (Succ (Var "x"))), Lam ("x", Nat, Produce (Succ (Var "x")))))) (Arrow (Nat, F Nat))
 let test11 =  test_typeofC_success [] (App (True, Lam ("x", Bool, Produce(Var "x")))) (F Bool)
-let test12 =   test_typeofC_success [] (Bind (Produce Zero, "x", Produce (Var "x"))) (F Nat)
+let test12 = test_typeofC_success [] (Bind (Produce Zero, "x", Produce (Var "x"))) (F Nat)
+let test13 = test_typeofC_success [] (Case (Inl (True, Nat), "x", Produce (Var "x"), "y", Produce(False))) (F Bool)
 
 
 (* test cases for typeofC where the typechecker should fail *)
@@ -169,7 +167,8 @@ let testfail_4 = test_typeofC_failure [] (App (True, Produce False))
 let testfail_5 = test_typeofC_failure [] (Bind (Lam ("y", Nat, Produce (Var "y")), "x", Produce (Var "x")))
 let testfail_6 = test_typeofC_failure [] (Thunk (Lam ("x", Nat, Produce (Var "x"))))
 let testfail_7 = test_typeofC_failure [] (PMPair (True, "x", "y", Produce Zero))
-
+let testfail_8 = test_typeofC_failure [] (Case (True, "x", Succ (Var "x"), "y", Zero))
+let testfail_9 = test_typeofC_failure [] (Case (Inl (True, Nat), "x", Produce (Var "x"), "y", Produce(Zero)))
 
 
 
@@ -391,8 +390,8 @@ let testeval3 = test_eval_success (IfThEl (False, Succ Zero, Zero)) Zero
 let testeval4 = test_eval_success (App (Succ Zero, Lam ( Nat, Succ (Var 0)))) (Succ (Succ Zero)) 
 let testeval5 = test_eval_success (LetIn ( Succ Zero, Succ (Var 0))) (Succ (Succ Zero)) 
 
-let testeval6 = test_eval_success (Case (Inr (Zero, Nat), Succ (Var 0), Var 0)) Zero 
-let testeval7 = test_eval_success (Case (Inl (True, Bool), Var 0, Zero)) True
+let testeval6 = test_eval_success (Case (Inr (Zero, Nat),Produce (Succ (Var 0)), Produce (Var 0))) (Produce Zero )
+let testeval7 = test_eval_success (Case (Inl (True, Bool), Produce(Var 0), Produce(Zero))) (Produce True)
 let testeval8 = test_eval_success (Fst (CompPair (Succ Zero, False))) (Succ Zero)
 let testeval9 = test_eval_success (Force (Thunk (IsZero Zero))) True
 
