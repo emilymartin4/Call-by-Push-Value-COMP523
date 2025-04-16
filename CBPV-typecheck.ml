@@ -41,6 +41,10 @@ type named_tm =
 | Produce of named_tm (* produce t *)
 | Force of named_tm (* force t *)
 | Thunk of named_tm (* thunk t *)
+| Fix of string * tpC * named_tm
+(* what is "diverge", but also we dont need it because it can be desugared as "fix x.force x" which we have with fix
+   it just means infinite loop on any input??? emily help! p71 levy *)
+
 
 type ctx = (string * tpV) list
 
@@ -102,6 +106,7 @@ and typeofC (ctx : ctx) (t : named_tm) : tpC = match t with
   | Bind (t1, x, t2) -> (match typeofC ctx t1 with
       | F a -> typeofC ((x, a) :: (List.filter (fun z -> fst z != x ) ctx)) t2 
       | _ -> raise (TypeError "Can only bind something of the form F A"))
+  | Fix (x,a,t) -> typeofC ((x,U a)::(List.filter (fun z -> fst z != x ) ctx)) t
   | _ -> raise (TypeError "Supposed to be a computation type, but it's not")
   (* application has arguments in the order A A->B *)
 
@@ -157,7 +162,7 @@ let test10 = test_typeofC_success [] (Fst (CompPair (Lam ("x", Nat, Produce (Suc
 let test11 =  test_typeofC_success [] (App (True, Lam ("x", Bool, Produce(Var "x")))) (F Bool)
 let test12 = test_typeofC_success [] (Bind (Produce Zero, "x", Produce (Var "x"))) (F Nat)
 let test13 = test_typeofC_success [] (Case (Inl (True, Nat), "x", Produce (Var "x"), "y", Produce(False))) (F Bool)
-
+let test14 = test_typeofC_success [] (Fix ("x", F Bool, Fst (CompPair( Produce True , Produce (Var "x"))))) (F Bool)
 
 (* test cases for typeofC where the typechecker should fail *)
 let testfail_1 = test_typeofC_failure [] (Lam ("x", Nat, Force (Succ (Var "x"))))
@@ -197,6 +202,7 @@ type tm =
 | Produce of tm (* produce t *)
 | Force of tm (* force t *)
 | Thunk of tm (* thunk t *)
+| Fix of tpC * tm (* fix x:B. t *)
 
 type name = string
 type ctx_debruijn = name list
@@ -230,6 +236,7 @@ let rec debruijnify (context : ctx_debruijn) (named_term : named_tm) : tm =
   | Produce t -> Produce (debruijnify context t)
   | Force t -> Force (debruijnify context t)
   | Thunk t -> Thunk (debruijnify context t)
+  | Fix (x, tp, t) ->  Fix (tp, debruijnify (x :: context) t) 
 
 
 let test_debruijnify (ctx : ctx_debruijn) (named_term : named_tm) (nameless_term : tm) : bool =
@@ -274,6 +281,7 @@ let rec shift (c : int) (d : int) (t : tm) : tm = match t with
   | Produce t -> Produce (shift c d t)
   | Force t -> Force (shift c d t)
   | Thunk t -> Thunk (shift c d t)
+  | Fix (tp, t) -> Fix (tp, shift (c + 1) d t)
 
 let test_shift (input : tm) (c : int) (d : int) (res : tm) : bool = 
   shift c d input = res
@@ -312,6 +320,7 @@ let rec subst (s : tm) (j : int) (t : tm) : tm = match t with
   | Produce t -> Produce (subst s j t)
   | Force t -> Force (subst s j t)
   | Thunk t -> Thunk (subst s j t)
+  | Fix (tp, t) -> Fix (tp, subst (shift 0 1 s) (j + 1) t)     
 
 let subst_test1 = subst (Var 1) 0 (Var 0) = Var 1
 let subst_test2 = subst (Var 1) 0 (Succ (Var 0)) = Succ (Var 1)
@@ -349,13 +358,13 @@ let rec eval (t : tm) = match t with
   | CompPair (n1, n2) -> eval n2
   | _ -> raise Crash)
 | ValPair (t1, t2) -> ValPair (eval t1, eval t2)
-| PMPair (v, t2) -> (match v with
-    | ValPair (v1, v2) -> let t2' = subst (shift 0 1 v1) 0 t2 in    (* shift them both by two!! looks like: pm (a,b) as \x. \y. in ... *)
+| PMPair (v, t2) -> (match eval v with    (* added an eval here, is there any reason it wasnt there before? *)
+    | ValPair (v1, v2) -> let t2' = subst (shift 0 1 v1) 0 t2 in    (* shift them both by two!! looks like, given a pair (a,b):  let x = a in let y = b in ... *)
     subst v2 0 t2' (* make sure this is the right order of shifts *)
     | _ -> raise Crash)
 | Inl (t,a) -> Inl (eval t, a) (* is this right? is this guaranteed to be a value? hehhehehe my bad i had inl/inr all wrong. it is fixed now, also it is eager style*)
 | Inr (t,a) -> Inr (eval t, a)
-| Case (t, t1, t2) -> (match t with
+| Case (t, t1, t2) -> (match eval t with  (* added an eval here as well*)
   | Inl (x,a) -> eval (subst x 0 t1)
   | Inr (y,a) -> eval (subst y 0 t2)
   | _ -> raise Crash
@@ -374,6 +383,7 @@ let rec eval (t : tm) = match t with
   | Thunk t1 -> eval t1       (* this was a mistake and i fixed it :) *)
   | _ -> raise Crash)
 | Thunk t -> Thunk t
+| Fix (tp, t) -> eval (subst (Thunk (Fix (tp, t))) 0 t) (* emily please check *)
 
 
 let test_eval_success t goal : bool = 
@@ -394,6 +404,7 @@ let testeval6 = test_eval_success (Case (Inr (Zero, Nat),Produce (Succ (Var 0)),
 let testeval7 = test_eval_success (Case (Inl (True, Bool), Produce(Var 0), Produce(Zero))) (Produce True)
 let testeval8 = test_eval_success (Fst (CompPair (Succ Zero, False))) (Succ Zero)
 let testeval9 = test_eval_success (Force (Thunk (IsZero Zero))) True
+(* add test cases for fix *)
 
 let testeval10 = test_eval_success (LetIn ( Succ Zero, LetIn ( Succ (Var 0), Var 0))) (Succ (Succ Zero)) 
 let testeval11 = test_eval_failure (IsZero True)
@@ -406,6 +417,17 @@ let testeval17 = test_eval_success (Case (Inl (True, Bool), Var 0, Var 0)) True
 let testeval18 = test_eval_success (App (Zero, Lam ( Nat, Succ (Var 0)))) (Succ Zero)
 let testeval19 = test_eval_failure (Force True)
 let testeval20 = test_eval_failure (Case (Zero, Var 0, Zero))
+let testeval21 = test_eval_success (App ( ValPair (True, False), Lam ( VCross (Bool, Bool), PMPair (Var 0, Var 0)))) False 
+(* add test cases for fix *)
+
+
+
+
+(*test a whole program, first type check then run??*)
+
+(* maybe add pred function, multiplication, factorial??*)
+
+
 
 
 (* transpiler from CBN to CBPV p277
@@ -435,6 +457,7 @@ type ntm =
 | InrN of ntm * tpN
 | IfThEl of ntm * ntm * ntm 
 | LetInN of string * ntm * ntm
+| FixN of tpN * ntm
 
 (* following p 59*)
 (* translation on types *)
@@ -460,7 +483,7 @@ let rec trans (t : ntm) : tm =
 | TrueN -> Produce (True)
 | FalseN -> Produce (True)
 | VarN i -> Force (Var i)
-| LamN (tp, t) -> Lam ( U (trans_tp tp), trans t )
+| LamN (tp, t) -> Lam ( U (trans_tp tp), trans t )  (* should we thunk here? *)
 | AppN (t1,t2) -> App (Thunk (trans t1), trans t2)
 | PairN (t1,t2) -> CompPair (trans t1, trans t2)
 | FstN t -> Fst (trans t) 
@@ -470,5 +493,6 @@ let rec trans (t : ntm) : tm =
 | InrN (t, a) -> Produce (Inr (Thunk (trans t ), U (trans_tp a)))
 | IfThEl (t1,t2,t3) -> Bind ( shift 0 1 (trans t1), IfThEl (Var 0,  (shift 0 1 (trans t2)),  (shift 0 1 (trans t3)) ))
 | LetInN (x, t1, t2) -> LetIn (Thunk (trans t1), trans t2)
+| FixN (tp, t) -> Fix ( trans_tp tp , trans t ) (* no idea if this is right *)
 
 (*for proof do true, pair, app, lam, case (easiest ot hardest)  *)
