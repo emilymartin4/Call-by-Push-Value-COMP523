@@ -349,7 +349,7 @@ let rec eval (t : tm) = match t with
   | True -> eval t2
   | False -> eval t3
   | _ -> raise Crash )
-| LetIn (v, t2) -> eval (subst v 0 t2)
+| LetIn (v, t2) -> let v' = shift 0 1 v in eval (shift 0 (-1) (subst v 0 t2)) (* CHANGED THIS ONE *)
 | CompPair (t1, t2) -> CompPair (t1, t2) (* is this right ??  yeah i think its a value*)
 | Fst t -> (match eval t with
   | CompPair (n1, n2) -> eval n1
@@ -359,8 +359,8 @@ let rec eval (t : tm) = match t with
   | _ -> raise Crash)
 | ValPair (t1, t2) -> ValPair (eval t1, eval t2)
 | PMPair (v, t2) -> (match eval v with    (* added an eval here, is there any reason it wasnt there before? *)
-    | ValPair (v1, v2) -> let t2' = subst (shift 0 1 v1) 0 t2 in    (* shift them both by two!! looks like, given a pair (a,b):  let x = a in let y = b in ... *)
-    subst v2 0 t2' (* make sure this is the right order of shifts *)
+    | ValPair (v1, v2) -> let t2' = let v2' = shift 0 1 v2 in (shift 0 (-1) (subst v2' 0 t2)) in
+    let v1' = shift 0 1 v1 in eval (shift 0 (-1) (subst v1' 0 t2')) (* CHANGED THIS ONE *)   (* shift them both by two!! looks like, given a pair (a,b):  let x = a in let y = b in ... *)(* make sure this is the right order of shifts *)
     | _ -> raise Crash)
 | Inl (t,a) -> Inl (eval t, a) (* is this right? is this guaranteed to be a value? hehhehehe my bad i had inl/inr all wrong. it is fixed now, also it is eager style*)
 | Inr (t,a) -> Inr (eval t, a)
