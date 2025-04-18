@@ -97,9 +97,8 @@ and typeofC (ctx : ctx) (t : named_tm) : tpC = match t with
           let (b1,b2) = typeofC ((x, a1)::(List.filter (fun z -> fst z != x ) ctx)) t1, typeofC ((y, a2)::(List.filter (fun z -> fst z != y ) ctx)) t2 in 
           if b1 = b2 then b1 else raise (TypeError "Types of branches of case don't match")
       | _ -> raise (TypeError "Case trying to match on something other than a Sum type")) 
-    
-      | App (v,t2) -> (match typeofC ctx t2 with 
-      | Arrow (tv,tc) -> if tv = typeofV ctx v then tc else raise (TypeError "Argument passed doesn't match function's input type")
+  | App (v,t2) -> (match typeofC ctx t2 with 
+  | Arrow (tv,tc) -> if tv = typeofV ctx v then tc else raise (TypeError "Argument passed doesn't match function's input type")
       | _ -> raise (TypeError "Second arg of application needs to be Arrow type"))
   | Bind (t1, x, t2) -> (match typeofC ctx t1 with
       | F a -> typeofC ((x, a) :: (List.filter (fun z -> fst z != x ) ctx)) t2 
@@ -147,9 +146,9 @@ let testfail8 = test_typeofV_failure [] (Lam ("x", Nat, Produce (Succ (Var "x"))
 
 
 (* test cases for typeofC where the typechecker should succeed *)
-let test1 = test_typeofC_success [] (PMPair (ValPair (True, Zero), "x", "y", Thunk (IfThEl (Var "x",Produce( Var "y"),Produce( Zero))))) (F Nat)
-let test2 = test_typeofC_success [("x", Nat)] (PMPair (ValPair (True, False), "x", "y", Var "x")) (F Bool) (* var overwriting *)
-let test3 = test_typeofC_success [] (PMPair (ValPair (True, False), "x", "y", Var "x")) (F Bool)
+let test1 = test_typeofC_success [] (PMPair (ValPair (True, Zero), "x", "y", IfThEl (Var "x",Produce(Var "y"),Produce(Zero)))) (F Nat)
+let test2 = test_typeofC_success [("x", Nat)] (PMPair (ValPair (True, False), "x", "y", Produce(Var "x"))) (F Bool) (* var overwriting *)
+let test3 = test_typeofC_success [] (PMPair (ValPair (True, False), "x", "y", Produce (Var "x"))) (F Bool)
 let test4 = test_typeofC_success [] (Lam ("x", Nat, Produce (Succ (Var "x")))) (Arrow (Nat, F Nat))
 let test5 =  test_typeofC_success [] (LetIn ("x", True, Produce (Var "x"))) (F Bool)
 let test6 = test_typeofC_success [] (Produce (Zero)) (F Nat)
