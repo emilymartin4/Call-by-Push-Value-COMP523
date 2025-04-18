@@ -394,7 +394,7 @@ let test_eval_failure t : bool =
 
 let testeval1 = test_eval_success (Succ (Succ Zero)) (Succ (Succ Zero)) 
 let testeval2 = test_eval_success (IsZero (Succ Zero)) False
-let testeval3 = test_eval_success (IfThEl (False, Succ Zero, Zero)) Zero
+let testeval3 = test_eval_success (IfThEl (False, Produce( Succ Zero), Produce(Zero))) (Produce(Zero))
 let testeval4 = test_eval_success (App (Succ Zero, Lam ( Nat, Succ (Var 0)))) (Succ (Succ Zero)) 
 let testeval5 = test_eval_success (LetIn ( Succ Zero, Succ (Var 0))) (Succ (Succ Zero)) 
 
@@ -406,7 +406,7 @@ let testeval9 = test_eval_success (Force (Thunk (IsZero Zero))) True
 
 let testeval10 = test_eval_success (LetIn ( Succ Zero, LetIn ( Succ (Var 0), Var 0))) (Succ (Succ Zero)) 
 let testeval11 = test_eval_failure (IsZero True)
-let testeval12 = test_eval_failure (IfThEl (Zero, Zero, False))
+let testeval12 = test_eval_failure (IfThEl (Zero, Produce(Zero), Produce(False)))
 let testeval13 = test_eval_failure (Var 0)
 let testeval14 = test_eval_success (App (Zero, Lam ( Nat, Succ (Var 0)))) (Succ Zero)
 let testeval15 = test_eval_success (Force (Thunk (Succ Zero))) (Succ Zero)
@@ -417,7 +417,6 @@ let testeval19 = test_eval_failure (Force True)
 let testeval20 = test_eval_failure (Case (Zero, Var 0, Zero))
 let testeval21 = test_eval_success (App ( ValPair (True, False), Lam ( VCross (Bool, Bool), PMPair (Var 0, Var 0)))) False 
 (* add test cases for fix *)
-
 
 
 
