@@ -67,16 +67,11 @@ let rec typeofV (ctx:ctx) (t : named_tm) : tpV = match t with
   | IsZero n -> (match typeofV ctx n with 
     | Nat -> Bool
     | _ -> raise (TypeError ("IsZero must be applied to something of type Nat")))
-  | IfThEl (t1, t2, t3) -> (match (typeofV ctx t1, typeofV ctx t2,  typeofV ctx t3) with 
-    | (Bool, x, y) -> if x = y then x else raise (TypeError ("Types of branches of if-then-else don't match"))
-    | _ -> raise (TypeError ("Either the scrutinee of if-then-else isn't a Bool, or the branches aren't value types")))
   | Thunk t -> U (typeofC ctx t)
   | Inl (t, a) -> Sum (typeofV ctx t, a) 
   | Inr (t, a) -> Sum (a, typeofV ctx t) 
   | ValPair (t1, t2) -> (let (x,y) = typeofV ctx t1, typeofV ctx t2 in VCross (x,y))  
   | _ ->  raise (TypeError ("Supposed to be a value, but it isn't"))
-
-
 and typeofC (ctx : ctx) (t : named_tm) : tpC = match t with
   | Lam (x,a,t) -> Arrow( a, typeofC ((x,a)::(List.filter (fun z -> fst z != x ) ctx)) t)            
   | LetIn (x, v, c) -> typeofC ((x, typeofV ctx v) ::  ctx) c 
@@ -84,6 +79,9 @@ and typeofC (ctx : ctx) (t : named_tm) : tpC = match t with
   | Force t -> (match typeofV ctx t with 
     | U t' -> t'
     | _ -> raise (TypeError ("Must force a Thunk")))
+  | IfThEl (t1, t2, t3) -> (match (typeofV ctx t1, typeofC ctx t2,  typeofC ctx t3) with 
+    | (Bool, x, y) -> if x = y then x else raise (TypeError ("Types of branches of if-then-else don't match")) (* how can we check equality of types here!*)
+    | _ -> raise (TypeError ("Either the scrutinee of if-then-else isn't a Bool, or the branches aren't computation types")))
   | CompPair (t1, t2) -> (let (x,y) = typeofC ctx t1, typeofC ctx t2 in CCross (x,y)) 
   | PMPair (t1, x, y, t2) -> (match typeofV ctx t1 with 
     | VCross (v1,v2) -> typeofC ([(x, v1);(y, v2)]  @ ctx) t2                             
@@ -131,7 +129,7 @@ let test_typeofV_failure (context :ctx) (tm: named_tm) : string =
 (* test cases for typeofV where the typechecker should succeed *)
 let test_1 = test_typeofV_success [("x", Nat)] (Succ (Var "x")) Nat
 let test_2 = test_typeofV_success [("x", Nat)] (IsZero (Var "x")) Bool
-let test_3 = test_typeofV_success [("x", Bool)] (IfThEl (Var "x", Succ Zero, Succ (Succ Zero))) Nat
+let test_3 = test_typeofC_success [("x", Bool)] (IfThEl (Var "x", Produce(Succ Zero),  Produce(Succ (Succ Zero)))) (F Nat)
 let test_4 = test_typeofV_success [] (Thunk (Lam ("x", Nat, Produce (Succ (Var "x"))))) (U (Arrow (Nat, F Nat)))
 let test_5 = test_typeofV_success [] (Inl (True, Nat)) (Sum (Bool, Nat))
 let test_7 = test_typeofV_success [] (ValPair (True, False)) (VCross (Bool, Bool))
@@ -142,14 +140,14 @@ let test_10 =  test_typeofV_success [] (Thunk (Produce (Succ Zero))) (U (F Nat))
 (* test cases for typeofV where the typechecker should fail *)
 let testfail1 = test_typeofV_failure [] (Var "x")
 let testfail2 = test_typeofV_failure [] (IsZero (True)) 
-let testfail3 = test_typeofV_failure [] (IfThEl (True, False, Succ Zero))
-let testfail4 = test_typeofV_failure [] (IfThEl (Zero, False, Succ Zero))
-let testfail5 = test_typeofV_failure [] (IfThEl (True, False, Produce (Succ Zero)))
+let testfail3 = test_typeofC_failure [] (IfThEl (True, Produce (False), Produce (Succ Zero)))
+let testfail4 = test_typeofC_failure [] (IfThEl (Zero, Produce (False), Produce (Succ Zero)))
+let testfail5 = test_typeofC_failure [] (IfThEl (True, Produce (False), Succ Zero))
 let testfail8 = test_typeofV_failure [] (Lam ("x", Nat, Produce (Succ (Var "x"))))
 
 
 (* test cases for typeofC where the typechecker should succeed *)
-let test1 =  test_typeofC_success [] (PMPair (ValPair (True, Zero), "x", "y", IfThEl (Var "x", Var "y", Zero))) (F Nat)
+let test1 = test_typeofC_success [] (PMPair (ValPair (True, Zero), "x", "y", Thunk (IfThEl (Var "x",Produce( Var "y"),Produce( Zero))))) (F Nat)
 let test2 = test_typeofC_success [("x", Nat)] (PMPair (ValPair (True, False), "x", "y", Var "x")) (F Bool) (* var overwriting *)
 let test3 = test_typeofC_success [] (PMPair (ValPair (True, False), "x", "y", Var "x")) (F Bool)
 let test4 = test_typeofC_success [] (Lam ("x", Nat, Produce (Succ (Var "x")))) (Arrow (Nat, F Nat))
@@ -349,7 +347,7 @@ let rec eval (t : tm) = match t with
   | True -> eval t2
   | False -> eval t3
   | _ -> raise Crash )
-| LetIn (v, t2) -> let v' = shift 0 1 v in eval (shift 0 (-1) (subst v 0 t2)) (* CHANGED THIS ONE *)
+| LetIn (v, t2) -> let v' = shift 0 1 v in eval (shift 0 (-1) (subst v' 0 t2)) (* CHANGED THIS ONE *)
 | CompPair (t1, t2) -> CompPair (t1, t2) (* is this right ??  yeah i think its a value*)
 | Fst t -> (match eval t with
   | CompPair (n1, n2) -> eval n1
