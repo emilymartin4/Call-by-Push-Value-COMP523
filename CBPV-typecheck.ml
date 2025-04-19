@@ -496,7 +496,7 @@ whichtyp = C (Arrow (VCross(Nat,Nat), F Nat))
 };
 
 
-{name = "timescomp"; (* this one doesnt work for some reason. *)
+{name = "timescomp"; (* this one doesnt work for some reason. issue is in Thunk (CompPair( Produce (Pred (Var "a")), Produce (Var "b"))) nit being the right type to apply to timesval???*)
 body =  Fix ("timescomp", Arrow (U (CCross(F Nat,F Nat)), F Nat),
   Lam("ab",U (CCross( F Nat,F Nat)), 
   Bind (Fst (Force (Var "ab")), "a" ,
@@ -520,7 +520,11 @@ whichtyp = C(F Nat);
 }*)
 ]
 
-
+let diverge = [{
+  name = "omega"; 
+  body = Fix ("omega", F Unit , Force (Var "omega"));
+  whichtyp = C (F Unit);
+  }]
 
 (* transpiler from CBN to CBPV p277
    prove translation on paper
