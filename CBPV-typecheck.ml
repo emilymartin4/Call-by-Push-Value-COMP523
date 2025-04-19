@@ -24,6 +24,7 @@ type named_tm =
 | False
 | Zero
 | Succ of named_tm
+| Pred of named_tm
 | IsZero of named_tm
 | IfThEl of named_tm * named_tm * named_tm (* if t1 then t2 else t3*)
 | LetIn of string * named_tm * named_tm (* let x = t1 in t2 *)
@@ -62,6 +63,7 @@ let rec typeofV (ctx:ctx) (t : named_tm) : tpV = match t with
   | False -> Bool
   | Zero -> Nat
   | Succ x -> typeofV ctx x
+  | Pred x -> typeofV ctx x
   | IsZero n -> (match typeofV ctx n with 
     | Nat -> Bool
     | _ -> raise (TypeError ("IsZero must be applied to something of type Nat")))
@@ -180,6 +182,7 @@ type tm =
 | False
 | Zero
 | Succ of tm
+| Pred of tm
 | IsZero of tm
 | IfThEl of tm * tm * tm (* if t1 then t2 else t3*)
 | LetIn of tm * tm (* let x = t1 in t2 *)
@@ -214,6 +217,7 @@ let rec debruijnify (context : ctx_debruijn) (named_term : named_tm) : tm =
   | False -> False
   | Zero -> Zero
   | Succ t -> Succ (debruijnify context t)
+  | Pred t -> Pred  (debruijnify context t)
   | IsZero n -> IsZero (debruijnify context n)
   | IfThEl (t1, t2, t3) -> IfThEl (debruijnify context t1, debruijnify context t2, debruijnify context t3)
   | LetIn (x, t1, t2) -> LetIn (debruijnify context t1, debruijnify (x :: context) t2)
@@ -259,6 +263,7 @@ let rec shift (c : int) (d : int) (t : tm) : tm = match t with
   | False -> False
   | Zero -> Zero
   | Succ t -> Succ (shift c d t)
+  | Pred t -> Pred (shift c d t)
   | IsZero t -> IsZero (shift c d t)
   | IfThEl (t1, t2, t3) -> IfThEl (shift c d t1, shift c d t2, shift c d t3)
   | LetIn (t1, t2) -> LetIn (shift c d t1, shift (c + 1) d t2) 
@@ -298,6 +303,7 @@ let rec subst (s : tm) (j : int) (t : tm) : tm = match t with
   | False -> False
   | Zero -> Zero
   | Succ t -> Succ (subst s j t)
+  | Pred t -> Pred (subst s j t)
   | IsZero t -> IsZero (subst s j t)
   | IfThEl (t1, t2, t3) -> IfThEl (subst s j t1, subst s j t2, subst s j t3)
   | LetIn (t1, t2) -> LetIn (subst s j t1, subst (shift 0 1 s) (j + 1) t2)
@@ -336,6 +342,10 @@ let rec eval (t : tm) = match t with
 | False -> False
 | Zero -> Zero
 | Succ t -> Succ (eval t)
+| Pred t -> (match eval t with
+  | Zero -> Zero
+  | Succ x -> x
+  | _ -> raise Crash)
 | IsZero t -> (match eval t with 
   | Zero -> True 
   | Succ n -> False 
@@ -420,7 +430,48 @@ let testeval21 = test_eval_success (App ( ValPair (True, False), Lam ( VCross (B
 (*test a whole program, first type check then run??*)
 
 (* maybe add pred function, multiplication, factorial??*)
+type either = C of tpC | V of tpV
 
+type decl =
+  {
+    name: string;
+    body: named_tm;
+    whichtyp: either;
+  }
+
+type program = decl list
+
+let check_program p =
+  let process_decl ctx { name; body; whichtyp } =
+    (match whichtyp with 
+    | V tpv ->  if typeofV ctx body = tpv then
+      (name, tpv) :: ctx else raise (TypeError ("program" ^ name ^ "didnt typecheck"))
+    | C tpc ->  if typeofC ctx body = tpc then
+      (name, U tpc) :: ctx else raise (TypeError ("program" ^ name ^ "didnt typecheck")))
+  in
+  ignore (List.fold_left process_decl [] p)
+
+(* 
+   
+add = fix add. lam x. lam y. if iszero x then y else add (pred x) (succ y) 
+ *)
+
+let prog = [
+{name = "add";
+body =  Fix("add", Arrow (VCross(Nat,Nat), F Nat),
+  Lam("xy", VCross(Nat,Nat), 
+  PMPair (Var "xy", "x", "y", 
+    IfThEl (IsZero (Var "x"), Var "y", App ( Succ (Var "y"), App (Pred (Var "x"),  Var "add" ))))));
+whichtyp = C (Arrow (VCross(Nat,Nat), F Nat))
+};
+{name = "times";
+body =  Fix ("times", Arrow (VCross(Nat,Nat), F Nat),
+  Lam("ab", VCross(Nat,Nat), 
+  PMPair (Var "ab", "a", "b", 
+    IfThEl (IsZero (Var "a"), Zero, App (Var "b" , App (App ( Var "b", App ( Pred (Var "a"), Var "times" )), Var "add"))))));
+whichtyp = C (Arrow (VCross(Nat,Nat), F Nat))
+}
+]
 
 
 
@@ -467,7 +518,7 @@ type ctxN = (string * tpN) list
 let rec trans_ctx (ctx : ctxN): ctx = match ctx with
 | [] -> []
 | (x, tp)::xs -> (x, U (trans_tp tp) ) :: trans_ctx ctx 
-                  (* ^ only value types can be in context so we thunk it. levy says this on 56 *)
+                  (* ^ only value types can be in context so we thunk it. Levy says this on 56 *)
 
 (* translation on terms *)
 let rec trans (t : ntm) : tm = 
@@ -477,7 +528,7 @@ let rec trans (t : ntm) : tm =
 | TrueN -> Produce (True)
 | FalseN -> Produce (True)
 | VarN i -> Force (Var i)
-| LamN (tp, t) -> Lam (U (trans_tp tp), trans t )  (* should we thunk here? *)
+| LamN (tp, t) -> Lam (U (trans_tp tp), trans t ) 
 | AppN (t1,t2) -> App (Thunk (trans t1), trans t2)
 | PairN (t1,t2) -> CompPair (trans t1, trans t2)
 | FstN t -> Fst (trans t) 
