@@ -451,6 +451,16 @@ let check_program p =
   in
   ignore (List.fold_left process_decl [] p)
 
+(* result should start as [] *)
+let rec run_program p (result : tm list) : tm list = 
+  check_program p;
+  match p with 
+  | [] -> result
+  | { name; body; whichtyp } :: xs -> 
+    run_program xs (result @ (eval (debruijnify [] body))) 
+
+  
+
 (* 
    
 add = fix add. lam x. lam y. if iszero x then y else add (pred x) (succ y) 
@@ -470,6 +480,12 @@ body =  Fix ("times", Arrow (VCross(Nat,Nat), F Nat),
   PMPair (Var "ab", "a", "b", 
     IfThEl (IsZero (Var "a"), Zero, App (Var "b" , App (App ( Var "b", App ( Pred (Var "a"), Var "times" )), Var "add"))))));
 whichtyp = C (Arrow (VCross(Nat,Nat), F Nat))
+};
+{name = "factorial";
+body = Fix ("factorial", Arrow (Nat, F Nat),
+  Lam ("n", Nat, 
+    IfThEl( IsZero (Var "n"), Succ Zero, App ( Var "n", App( App (Pred (Var "n"), Var "factorial" ), Var "times")))));
+whichtyp = C (Arrow (Nat, F Nat));
 }
 ]
 
