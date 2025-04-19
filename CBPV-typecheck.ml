@@ -71,7 +71,7 @@ let rec typeofV (ctx:ctx) (t : named_tm) : tpV = match t with
   | Inl (t, a) -> Sum (typeofV ctx t, a) 
   | Inr (t, a) -> Sum (a, typeofV ctx t) 
   | ValPair (t1, t2) -> (let (x,y) = typeofV ctx t1, typeofV ctx t2 in VCross (x,y))  
-  | _ ->  raise (TypeError ("Supposed to be a value, but it isn't"))
+  | _ ->  raise (TypeError ("Supposed to be a value, but it isn't " ^ (String.concat "" (List.map (fun x -> fst x ^ ", ") ctx))))
 and typeofC (ctx : ctx) (t : named_tm) : tpC = match t with
   | Lam (x,a,t) -> Arrow( a, typeofC ((x,a)::(List.filter (fun z -> fst z <> x ) ctx)) t)            
   | LetIn (x, v, c) -> typeofC ((x, typeofV ctx v) ::  ctx) c 
@@ -211,7 +211,7 @@ let rec debruijnify (context : ctx_debruijn) (named_term : named_tm) : tm =
   | Var x ->  (
         match List.find_index (fun y -> x = y) context with
         | Some i  -> Var i
-        | None -> failwith ("Variable not found in context lookup"))
+        | None -> failwith ("Variable " ^ x ^ " not found in context lookup"))
   | Unit -> Unit
   | True -> True
   | False -> False
@@ -476,7 +476,7 @@ whichtyp = C (Arrow (VCross(Nat,Nat), F Nat))
 
 {name = "addcomp";
 body =  Fix("addcomp", Arrow (U (CCross(F Nat,F Nat)), F Nat), 
-  Lam("xy", U (CCross( F Nat,F Nat)), 
+  Lam("xy", U (CCross( F Nat, F Nat)), 
   Bind (Fst (Force (Var "xy")), "x" ,
   Bind (Snd (Force (Var "xy")), "y",
   IfThEl (IsZero (Var "x"), 
@@ -485,24 +485,37 @@ body =  Fix("addcomp", Arrow (U (CCross(F Nat,F Nat)), F Nat),
 whichtyp = C (Arrow (U (CCross(F Nat,F Nat)),  F Nat))
 };
 
-(*
-{name = "timesval";
-body =  Fix ("times", Arrow (VCross(Nat,Nat), F Nat),
-  Lam("ab", VCross(Nat,Nat), 
-  PMPair (Var "ab", "a", "b", 
-    IfThEl (IsZero (Var "a"), 
-      Produce Zero, 
-      App ( ValPair(Var "b", Thunk (App (ValPair(Pred (Var "a"), Var "b"), Force (Var "timesval")))), Force (Var "addcomp"))))));
+{name = "timesval"; (* only issue now is different functions cannot call eachother in run_program. idk how ot fix this. *)
+body =  Fix ("timesval", Arrow (VCross(Nat,Nat), F Nat),
+  Lam("ab1", VCross(Nat,Nat), 
+  PMPair (Var "ab1", "a1", "b1", 
+  IfThEl (IsZero (Var "a1"), 
+    Produce Zero, 
+    App ( Thunk (CompPair( Produce(Var "b1"), App (ValPair(Pred (Var "a1"), Var "b1"),Force (Var "timesval")))), Force (Var "addcomp"))))));
 whichtyp = C (Arrow (VCross(Nat,Nat), F Nat))
 };
+
+
+{name = "timescomp"; (* this one doesnt work for some reason. *)
+body =  Fix ("timescomp", Arrow (U (CCross(F Nat,F Nat)), F Nat),
+  Lam("ab",U (CCross( F Nat,F Nat)), 
+  Bind (Fst (Force (Var "ab")), "a" ,
+  Bind (Snd (Force (Var "ab")), "b",
+  IfThEl (IsZero (Var "a"), 
+    Produce Zero, 
+    App ( Thunk (CompPair (Produce (Var "b"), App (Thunk (CompPair( Produce (Pred (Var "a")), Produce (Var "b"))), Force (Var "timesval")))), Force (Var "addcomp")))))));
+whichtyp = C (Arrow (U (CCross(F Nat,F Nat)), F Nat))
+};
+
+(*
 {name = "factorial";
 body = Fix ("factorial", Arrow (Nat, F Nat),
   Lam ("n", Nat, 
-    IfThEl( IsZero (Var "n"), Succ Zero, App ( Var "n", App( App (Pred (Var "n"), Var "factorial" ), Var "times")))));
+    IfThEl( IsZero (Var "n"), Succ Zero, App ( Var "n", App( App (Pred (Var "n"), Force( Var "factorial") ), Force (Var "times"))))));
 whichtyp = C (Arrow (Nat, F Nat));
 };
 {name = "fact3";
-body = Produce (App (Succ (Succ (Succ Zero)), Var "factorial"));
+body = Produce (App (Succ (Succ (Succ Zero)), Force (Var "factorial")));
 whichtyp = C(F Nat);
 }*)
 ]
