@@ -73,7 +73,7 @@ let rec typeofV (ctx:ctx) (t : named_tm) : tpV = match t with
   | ValPair (t1, t2) -> (let (x,y) = typeofV ctx t1, typeofV ctx t2 in VCross (x,y))  
   | _ ->  raise (TypeError ("Supposed to be a value, but it isn't"))
 and typeofC (ctx : ctx) (t : named_tm) : tpC = match t with
-  | Lam (x,a,t) -> Arrow( a, typeofC ((x,a)::(List.filter (fun z -> fst z != x ) ctx)) t)            
+  | Lam (x,a,t) -> Arrow( a, typeofC ((x,a)::(List.filter (fun z -> fst z <> x ) ctx)) t)            
   | LetIn (x, v, c) -> typeofC ((x, typeofV ctx v) ::  ctx) c 
   | Produce t -> F (typeofV ctx t)
   | Force t -> (match typeofV ctx t with 
@@ -94,17 +94,17 @@ and typeofC (ctx : ctx) (t : named_tm) : tpC = match t with
       | _ -> raise (TypeError "Snd needs to be applied to a computation pair"))
   | Case (t,x,t1,y,t2) -> (match typeofV ctx t with        
       | Sum (a1, a2) -> 
-          let (b1,b2) = typeofC ((x, a1)::(List.filter (fun z -> fst z != x ) ctx)) t1, typeofC ((y, a2)::(List.filter (fun z -> fst z != y ) ctx)) t2 in 
+          let (b1,b2) = typeofC ((x, a1)::(List.filter (fun z -> fst z <> x ) ctx)) t1, typeofC ((y, a2)::(List.filter (fun z -> fst z <> y ) ctx)) t2 in 
           if b1 = b2 then b1 else raise (TypeError "Types of branches of case don't match")
       | _ -> raise (TypeError "Case trying to match on something other than a Sum type")) 
   | App (v,t2) -> (match typeofC ctx t2 with 
       | Arrow (tv,tc) -> if tv = typeofV ctx v then tc else raise (TypeError "Argument passed doesn't match function's input type")
       | _ -> raise (TypeError "Second arg of application needs to be Arrow type"))
   | Bind (t1, x, t2) -> (match typeofC ctx t1 with
-      | F a -> typeofC ((x, a) :: (List.filter (fun z -> fst z != x ) ctx)) t2 
+      | F a -> typeofC ((x, a) :: (List.filter (fun z -> fst z <> x ) ctx)) t2 
       | _ -> raise (TypeError "Can only bind something of the form F A"))
-  | Fix (x,a,t) -> typeofC ((x,U a)::(List.filter (fun z -> fst z != x ) ctx)) t
-  | _ -> raise (TypeError "Supposed to be a computation type, but it's not")
+  | Fix (x,a,t) -> typeofC ((x,U a)::(List.filter (fun z -> fst z <> x ) ctx)) t
+  | _ -> raise (TypeError ("Supposed to be a computation type, but it's not " ^ (String.concat "" (List.map (fun x -> fst x ^ ", ") ctx))))
 
 
 
@@ -445,40 +445,54 @@ let check_program p =
   let process_decl ctx { name; body; whichtyp } =
     (match whichtyp with 
     | V tpv ->  if typeofV ctx body = tpv then
-      (name, tpv) :: ctx else raise (TypeError ("program" ^ name ^ "didnt typecheck"))
+      (name, tpv) :: ctx else raise (TypeError ("program " ^ name ^ " didnt typecheck"))
     | C tpc ->  if typeofC ctx body = tpc then
-      (name, U tpc) :: ctx else raise (TypeError ("program" ^ name ^ "didnt typecheck")))
+      (name, U tpc) :: ctx else raise (TypeError ("program " ^ name ^ " didnt typecheck")))
   in
   ignore (List.fold_left process_decl [] p)
 
 (* result should start as [] *)
-let rec run_program p (result : tm list) : tm list = 
+let run_program p : tm list = 
   check_program p;
+  let rec run p result = 
   match p with 
   | [] -> result
   | { name; body; whichtyp } :: xs -> 
-    run_program xs (result @ (eval (debruijnify [] body))) 
+    run xs (result @ [eval (debruijnify [] body)]) 
+  in
+  run p [] 
 
-  
 
-(* 
-   
-add = fix add. lam x. lam y. if iszero x then y else add (pred x) (succ y) 
- *)
 
+(* program that has add, multiply, factorial, and two tests for factorial *)
 let prog = [
-{name = "add";
-body =  Fix("add", Arrow (VCross(Nat,Nat), F Nat),
-  Lam("xy", VCross(Nat,Nat), 
-  PMPair (Var "xy", "x", "y", 
-    IfThEl (IsZero (Var "x"), Var "y", App ( Succ (Var "y"), App (Pred (Var "x"),  Var "add" ))))));
+{name = "addval";
+body =  Fix("addval", Arrow (VCross(Nat,Nat), F Nat),
+  Lam("xy1", VCross(Nat,Nat), 
+  PMPair (Var "xy1", "x1", "y1", 
+    IfThEl (IsZero (Var "x1"), Produce( Var "y1"), App ( ValPair(Pred (Var "x1"), Succ (Var "y1") ), Force( Var "addval" ))))));
 whichtyp = C (Arrow (VCross(Nat,Nat), F Nat))
 };
-{name = "times";
+
+{name = "addcomp";
+body =  Fix("addcomp", Arrow (U (CCross(F Nat,F Nat)), F Nat), 
+  Lam("xy", U (CCross( F Nat,F Nat)), 
+  Bind (Fst (Force (Var "xy")), "x" ,
+  Bind (Snd (Force (Var "xy")), "y",
+  IfThEl (IsZero (Var "x"), 
+  Produce (Var "y"), 
+  App (Thunk (CompPair(Produce (Pred (Var "x")), Produce (Succ (Var "y")))), Force (Var "addcomp" )))))));
+whichtyp = C (Arrow (U (CCross(F Nat,F Nat)),  F Nat))
+};
+
+(*
+{name = "timesval";
 body =  Fix ("times", Arrow (VCross(Nat,Nat), F Nat),
   Lam("ab", VCross(Nat,Nat), 
   PMPair (Var "ab", "a", "b", 
-    IfThEl (IsZero (Var "a"), Zero, App (Var "b" , App (App ( Var "b", App ( Pred (Var "a"), Var "times" )), Var "add"))))));
+    IfThEl (IsZero (Var "a"), 
+      Produce Zero, 
+      App ( ValPair(Var "b", Thunk (App (ValPair(Pred (Var "a"), Var "b"), Force (Var "timesval")))), Force (Var "addcomp"))))));
 whichtyp = C (Arrow (VCross(Nat,Nat), F Nat))
 };
 {name = "factorial";
@@ -486,7 +500,11 @@ body = Fix ("factorial", Arrow (Nat, F Nat),
   Lam ("n", Nat, 
     IfThEl( IsZero (Var "n"), Succ Zero, App ( Var "n", App( App (Pred (Var "n"), Var "factorial" ), Var "times")))));
 whichtyp = C (Arrow (Nat, F Nat));
-}
+};
+{name = "fact3";
+body = Produce (App (Succ (Succ (Succ Zero)), Var "factorial"));
+whichtyp = C(F Nat);
+}*)
 ]
 
 
