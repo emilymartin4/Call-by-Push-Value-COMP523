@@ -451,7 +451,8 @@ let check_program p =
   in
   ignore (List.fold_left process_decl [] p)
 
-(* result should start as [] *)
+
+
 let run_program p : tm list = 
   check_program p;
   let rec run p result = 
@@ -465,6 +466,38 @@ let run_program p : tm list =
 
 
 (* program that has add, multiply, factorial, and two tests for factorial *)
+let test = [
+  {name = "addval";
+  body =  LetIn ( "addcomp", 
+
+  Thunk (Fix("addcomp", Arrow (U (CCross(F Nat,F Nat)), F Nat), 
+    Lam("xy", U (CCross( F Nat, F Nat)), 
+    Bind (Fst (Force (Var "xy")), "x" ,
+    Bind (Snd (Force (Var "xy")), "y",
+    IfThEl (IsZero (Var "x"), 
+    Produce (Var "y"), 
+    App (Thunk (CompPair(Produce (Pred (Var "x")), Produce (Succ (Var "y")))), Force (Var "addcomp" ))))))))
+  
+  
+  
+  ,Fix("addval", Arrow (VCross(Nat,Nat), F Nat),
+    Lam("xy1", VCross(Nat,Nat), 
+    PMPair (Var "xy1", "x1", "y1", 
+      IfThEl (IsZero (Var "x1"), Produce( Var "y1"), App ( ValPair(Pred (Var "x1"), Succ (Var "y1") ), Force( Var "addval" )))))));
+  whichtyp = C (Arrow (VCross(Nat,Nat), F Nat))
+  }]
+
+(* in check_program, nest everything with let-ins as follows
+   a
+   b
+   c
+   d
+   -> let a = a.body in let b = b.body in let c = c.body in d
+
+   then call run program on that nested version?
+   *)
+
+
 let prog = [
 {name = "addval";
 body =  Fix("addval", Arrow (VCross(Nat,Nat), F Nat),
