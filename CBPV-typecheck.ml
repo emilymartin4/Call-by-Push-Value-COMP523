@@ -452,7 +452,20 @@ let check_program p =
   ignore (List.fold_left process_decl [] p)
 
 
+(* runs programs that refer to each other, theres definetly a better way to do it. the old version is commented out below*)
+let run_program p : tm = 
+  check_program p;
+  let rec build p = 
+  match p with 
+  | [] -> failwith "empty program"
+  | [{ name; body; whichtyp }] -> body
+  | { name; body; whichtyp } :: xs -> 
+    LetIn( name, body, build xs ) 
+  in
+  eval (debruijnify [] (build p) )
 
+
+(*
 let run_program p : tm list = 
   check_program p;
   let rec run p result = 
@@ -462,6 +475,7 @@ let run_program p : tm list =
     run xs (result @ [eval (debruijnify [] body)]) 
   in
   run p [] 
+*)
 
 
 
@@ -528,7 +542,6 @@ body =  Fix ("timesval", Arrow (VCross(Nat,Nat), F Nat),
 whichtyp = C (Arrow (VCross(Nat,Nat), F Nat))
 };
 
-
 {name = "timescomp"; (* this one doesnt work for some reason. issue is in Thunk (CompPair( Produce (Pred (Var "a")), Produce (Var "b"))) nit being the right type to apply to timesval???*)
 body =  Fix ("timescomp", Arrow (U (CCross(F Nat,F Nat)), F Nat),
   Lam("ab",U (CCross( F Nat,F Nat)), 
@@ -537,7 +550,7 @@ body =  Fix ("timescomp", Arrow (U (CCross(F Nat,F Nat)), F Nat),
   IfThEl (IsZero (Var "a"), 
     Produce Zero, 
     App ( Thunk (CompPair (Produce (Var "b"), App (Thunk (CompPair( Produce (Pred (Var "a")), Produce (Var "b"))), Force (Var "timesval")))), Force (Var "addcomp")))))));
-whichtyp = C (Arrow (U (CCross(F Nat,F Nat)), F Nat))
+whichtyp = C (Arrow (U (CCross(F Nat,F Nat)), F Nat)) 
 };
 
 (*
@@ -550,7 +563,14 @@ whichtyp = C (Arrow (Nat, F Nat));
 {name = "fact3";
 body = Produce (App (Succ (Succ (Succ Zero)), Force (Var "factorial")));
 whichtyp = C(F Nat);
-}*)
+}
+
+{name = "3plus2";
+body =  Produce (App ( ValPair( Succ(Succ(Succ Zero)), Succ(Succ Zero)), Force( Var "addval" )));
+whichtyp =  V Nat;
+};
+
+*)
 ]
 
 let diverge = [{
