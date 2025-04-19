@@ -37,7 +37,7 @@ type named_tm =
 | Case of named_tm * string * named_tm * string * named_tm (* pm V as inl x -> t1 | inl r -> t2 *)
 | Lam of string * tpV * named_tm                (* also called pop *)
 | App of named_tm * named_tm                           (* also called push *)
-| Bind of named_tm * string * named_tm    (* t1 to x. t2 * <- check that what i added in the typechecker is correct *)
+| Bind of named_tm * string * named_tm    (* t1 to x. t2. sequencing computations - t1 must be a producer type *)
 | Produce of named_tm (* produce t *)
 | Force of named_tm (* force t *)
 | Thunk of named_tm (* thunk t *)
@@ -51,10 +51,8 @@ type ctx = (string * tpV) list
 exception TypeError of string 
 
 (*there is no variable shadowing. new declarations with the same name just overwrite*)
-(*TODO: enforce anything added to context is a value type (right now this is enforced by ocamls type checker, so we dont display an error message got it. )*)
 
 (* our type checker, split in to two mutually recursive functions. one for values and one for computations. *)
-(* check inl and inr - they are being used to destruct a sum type instead of construct one <- Emily*)
 let rec typeofV (ctx:ctx) (t : named_tm) : tpV = match t with
   | Var x -> (match find_opt (fun y -> fst y = x ) ctx with 
     | None -> raise (TypeError ("Variable " ^ x ^ " is free"))
@@ -80,7 +78,7 @@ and typeofC (ctx : ctx) (t : named_tm) : tpC = match t with
     | U t' -> t'
     | _ -> raise (TypeError ("Must force a Thunk")))
   | IfThEl (t1, t2, t3) -> (match (typeofV ctx t1, typeofC ctx t2,  typeofC ctx t3) with 
-    | (Bool, x, y) -> if x = y then x else raise (TypeError ("Types of branches of if-then-else don't match")) (* how can we check equality of types here!*)
+    | (Bool, x, y) -> if x = y then x else raise (TypeError ("Types of branches of if-then-else don't match")) 
     | _ -> raise (TypeError ("Either the scrutinee of if-then-else isn't a Bool, or the branches aren't computation types")))
   | CompPair (t1, t2) -> (let (x,y) = typeofC ctx t1, typeofC ctx t2 in CCross (x,y)) 
   | PMPair (t1, x, y, t2) -> (match typeofV ctx t1 with 
@@ -98,17 +96,17 @@ and typeofC (ctx : ctx) (t : named_tm) : tpC = match t with
           if b1 = b2 then b1 else raise (TypeError "Types of branches of case don't match")
       | _ -> raise (TypeError "Case trying to match on something other than a Sum type")) 
   | App (v,t2) -> (match typeofC ctx t2 with 
-  | Arrow (tv,tc) -> if tv = typeofV ctx v then tc else raise (TypeError "Argument passed doesn't match function's input type")
+      | Arrow (tv,tc) -> if tv = typeofV ctx v then tc else raise (TypeError "Argument passed doesn't match function's input type")
       | _ -> raise (TypeError "Second arg of application needs to be Arrow type"))
   | Bind (t1, x, t2) -> (match typeofC ctx t1 with
       | F a -> typeofC ((x, a) :: (List.filter (fun z -> fst z != x ) ctx)) t2 
       | _ -> raise (TypeError "Can only bind something of the form F A"))
   | Fix (x,a,t) -> typeofC ((x,U a)::(List.filter (fun z -> fst z != x ) ctx)) t
   | _ -> raise (TypeError "Supposed to be a computation type, but it's not")
-  (* application has arguments in the order A A->B *)
 
 
-let test_typeofC_success (context :ctx) (tm: named_tm) ( ty : tpC) = 
+
+let test_typeofC_success (context :ctx) (tm: named_tm) (ty : tpC) = 
   try typeofC context tm = ty with
 | TypeError x -> false
 
@@ -239,7 +237,7 @@ let rec debruijnify (context : ctx_debruijn) (named_term : named_tm) : tm =
 let test_debruijnify (ctx : ctx_debruijn) (named_term : named_tm) (nameless_term : tm) : bool =
   debruijnify ctx named_term = nameless_term
 
-(* add more of these *)
+(* debruijnify tests *)
 let test1_db = test_debruijnify ["x"] (Var "x") (Var 0)
 let test2_db = test_debruijnify ["y"; "x"] (Succ (Var "x")) (Succ (Var 1))
 let test3_db = test_debruijnify [] (LetIn ("x", True, Var "x")) (LetIn (True, Var 0))
@@ -307,7 +305,7 @@ let rec subst (s : tm) (j : int) (t : tm) : tm = match t with
   | Fst t -> Fst (subst s j t)
   | Snd t -> Snd (subst s j t)
   | ValPair (t1, t2) -> ValPair (subst s j t1, subst s j t2)
-  | PMPair (t1, t2) -> PMPair (subst s j t1, subst (shift 0 2 s) (j + 2) t2) (* unsure about this case*)
+  | PMPair (t1, t2) -> PMPair (subst s j t1, subst (shift 0 2 s) (j + 2) t2) 
   | Inl (t,a) -> Inl (subst s j t, a)
   | Inr (t,a) -> Inr (subst s j t, a)
   | Case (t, t1, t2) -> Case (subst s j t, subst (shift 0 1 s) (j + 1) t1, subst (shift 0 1 s) (j + 1) t2) (* pm t as inl x -> t1 | inl r -> t2 *)
@@ -330,7 +328,7 @@ let subst_test8 = subst (Var 1) 0 (Var 2) = Var 2
 let subst_test9 = subst (Var 2) 0 (Lam (Nat, Var 0)) = Lam (Nat, Var 0)
 let subst_test10 = subst (Var 2) 0 (Force (Var 0)) = Force (Var 2)
 
-(* we are gonna do a big step evaluator*)
+(* big-step evaluator *)
 let rec eval (t : tm) = match t with
 | Var x -> raise Crash
 | Unit -> Unit
@@ -346,8 +344,8 @@ let rec eval (t : tm) = match t with
   | True -> eval t2
   | False -> eval t3
   | _ -> raise Crash )
-| LetIn (v, t2) -> let v' = shift 0 1 v in eval (shift 0 (-1) (subst v' 0 t2)) (* CHANGED THIS ONE *)
-| CompPair (t1, t2) -> CompPair (t1, t2) (* is this right ??  yeah i think its a value*)
+| LetIn (v, t2) -> let v' = shift 0 1 v in eval (shift 0 (-1) (subst v' 0 t2)) 
+| CompPair (t1, t2) -> CompPair (t1, t2) 
 | Fst t -> (match eval t with
   | CompPair (n1, n2) -> eval n1
   | _ -> raise Crash)
@@ -355,20 +353,20 @@ let rec eval (t : tm) = match t with
   | CompPair (n1, n2) -> eval n2
   | _ -> raise Crash)
 | ValPair (t1, t2) -> ValPair (eval t1, eval t2)
-| PMPair (v, t2) -> (match eval v with    (* added an eval here, is there any reason it wasnt there before? *)
+| PMPair (v, t2) -> (match eval v with 
     | ValPair (v1, v2) -> let t2' = let v2' = shift 0 1 v2 in (shift 0 (-1) (subst v2' 0 t2)) in
-    let v1' = shift 0 1 v1 in eval (shift 0 (-1) (subst v1' 0 t2')) (* CHANGED THIS ONE *)   (* shift them both by two!! looks like, given a pair (a,b):  let x = a in let y = b in ... *)(* make sure this is the right order of shifts *)
+    let v1' = shift 0 1 v1 in eval (shift 0 (-1) (subst v1' 0 t2')) 
     | _ -> raise Crash)
-| Inl (t,a) -> Inl (eval t, a) (* is this right? is this guaranteed to be a value? hehhehehe my bad i had inl/inr all wrong. it is fixed now, also it is eager style*)
+| Inl (t,a) -> Inl (eval t, a)
 | Inr (t,a) -> Inr (eval t, a)
-| Case (t, t1, t2) -> (match eval t with  (* added an eval here as well*)
-  | Inl (x,a) -> eval (subst x 0 t1)
-  | Inr (y,a) -> eval (subst y 0 t2)
+| Case (t, t1, t2) -> (match eval t with 
+  | Inl (x,a) -> let x' = shift 0 1 x in eval (shift 0 (-1) (subst x' 0 t1))
+  | Inr (y,a) -> let y' = shift 0 1 y in eval (shift 0 (-1) (subst y' 0 t2))
   | _ -> raise Crash
 )
 | Lam (tp, t) -> Lam (tp, t)         
 | App (v, t2) -> (match eval t2 with
-  | Lam (tp, t) -> let arg = shift 0 1 v in eval (shift 0 (-1) (subst arg 0 t)) (* how is it guaranteed that v is a value? i guess because it wouldn't have typechecked otherwise? yes i think so. App takes tpV * tpC *)
+  | Lam (tp, t) -> let arg = shift 0 1 v in eval (shift 0 (-1) (subst arg 0 t)) 
   | _ -> raise Crash
 )                    (* also called push *)
 | Bind (t1, t2) -> (match eval t1 with
@@ -377,7 +375,7 @@ let rec eval (t : tm) = match t with
 )
 | Produce v -> Produce v
 | Force t -> (match eval t with
-  | Thunk t1 -> eval t1       (* this was a mistake and i fixed it :) *)
+  | Thunk t1 -> eval t1 
   | _ -> raise Crash)
 | Thunk t -> Thunk t
 | Fix (tp, t) -> eval (subst (Thunk (Fix (tp, t))) 0 t) (* emily please check *)
@@ -396,11 +394,11 @@ let testeval2 = test_eval_success (IsZero (Succ Zero)) False
 let testeval3 = test_eval_success (IfThEl (False, Produce( Succ Zero), Produce(Zero))) (Produce(Zero))
 let testeval4 = test_eval_success (App (Succ Zero, Lam ( Nat, Succ (Var 0)))) (Succ (Succ Zero)) 
 let testeval5 = test_eval_success (LetIn ( Succ Zero, Succ (Var 0))) (Succ (Succ Zero)) 
-
-let testeval6 = test_eval_success (Case (Inr (Zero, Nat),Produce (Succ (Var 0)), Produce (Var 0))) (Produce Zero )
+let testeval6 = test_eval_success (Case (Inr (Zero, Nat),Produce (Succ (Var 0)), Produce (Var 0))) (Produce Zero)
 let testeval7 = test_eval_success (Case (Inl (True, Bool), Produce(Var 0), Produce(Zero))) (Produce True)
 let testeval8 = test_eval_success (Fst (CompPair (Succ Zero, False))) (Succ Zero)
 let testeval9 = test_eval_success (Force (Thunk (IsZero Zero))) True
+
 (* add test cases for fix *)
 
 let testeval10 = test_eval_success (LetIn ( Succ Zero, LetIn ( Succ (Var 0), Var 0))) (Succ (Succ Zero)) 
@@ -409,7 +407,7 @@ let testeval12 = test_eval_failure (IfThEl (Zero, Produce(Zero), Produce(False))
 let testeval13 = test_eval_failure (Var 0)
 let testeval14 = test_eval_success (App (Zero, Lam ( Nat, Succ (Var 0)))) (Succ Zero)
 let testeval15 = test_eval_success (Force (Thunk (Succ Zero))) (Succ Zero)
-let testeval16 = test_eval_success (PMPair (ValPair (True, False), Var 0)) False  (* still failing!! *)
+let testeval16 = test_eval_success (PMPair (ValPair (True, False), Var 0)) False 
 let testeval17 = test_eval_success (Case (Inl (True, Bool), Var 0, Var 0)) True
 let testeval18 = test_eval_success (App (Zero, Lam ( Nat, Succ (Var 0)))) (Succ Zero)
 let testeval19 = test_eval_failure (Force True)
@@ -479,7 +477,7 @@ let rec trans (t : ntm) : tm =
 | TrueN -> Produce (True)
 | FalseN -> Produce (True)
 | VarN i -> Force (Var i)
-| LamN (tp, t) -> Lam ( U (trans_tp tp), trans t )  (* should we thunk here? *)
+| LamN (tp, t) -> Lam (U (trans_tp tp), trans t )  (* should we thunk here? *)
 | AppN (t1,t2) -> App (Thunk (trans t1), trans t2)
 | PairN (t1,t2) -> CompPair (trans t1, trans t2)
 | FstN t -> Fst (trans t) 
