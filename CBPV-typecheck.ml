@@ -544,8 +544,8 @@ whichtyp = C (Arrow (VCross(Nat,Nat), F Nat))
 };
 
 {name = "0plus0"; (* bro why wont this work *)
-body = Force (App (ValPair(Zero, Zero), Force ( Var "addval")));
-whichtyp =  V Nat;
+body = App (Thunk (CompPair(Produce Zero, Produce Zero)), Force ( Var "addcomp"));
+whichtyp =  C (F Nat);
 };
 (*
 {name = "3plus2";
