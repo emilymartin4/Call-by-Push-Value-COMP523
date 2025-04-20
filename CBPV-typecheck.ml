@@ -453,19 +453,21 @@ let check_program p =
   ignore (List.fold_left process_decl [] p)
 
 
-(* runs programs that refer to each other, theres definetly a better way to do it. the old version is commented out below*)
-let run_program p : tm = 
+(* Runs programs that has functions that can refer to each other,
+   outputs the result of the last function defined.*)
+let run_program p : tm  = 
   check_program p;
   let rec build p  = 
   match p with 
   | [] -> failwith "empty program"
   | [{ name; body; whichtyp }] -> body
-  | { name; body; whichtyp } :: xs -> 
-    LetIn( name, body, build xs ) 
+  | { name; body; whichtyp } :: xs -> match whichtyp with 
+    | C tpc -> LetIn( name, Thunk body, build xs ) 
+    | V tpv -> LetIn( name, body, build xs ) 
   in
   eval (debruijnify [] (build p) )
 
-
+(* Version where functions in a program cant see each other*)
 (*
 let run_program p : tm list = 
   check_program p;
@@ -481,37 +483,41 @@ let run_program p : tm list =
 
 
 (* program that has add, multiply, factorial, and two tests for factorial *)
-let test = [
-  {name = "addval";
-  body =  LetIn ( "addcomp", 
 
-  Thunk (Fix("addcomp", Arrow (U (CCross(F Nat,F Nat)), F Nat), 
-    Lam("xy", U (CCross( F Nat, F Nat)), 
-    Bind (Fst (Force (Var "xy")), "x" ,
-    Bind (Snd (Force (Var "xy")), "y",
-    IfThEl (IsZero (Var "x"), 
-    Produce (Var "y"), 
-    App (Thunk (CompPair(Produce (Pred (Var "x")), Produce (Succ (Var "y")))), Force (Var "addcomp" ))))))))
-  
-  
-  
-  ,Fix("addval", Arrow (VCross(Nat,Nat), F Nat),
+
+(* works, dont touch it *)
+let zeropluszero =  [
+  {name = "addval";
+  body =  Fix("addval", Arrow (VCross(Nat,Nat), F Nat),
     Lam("xy1", VCross(Nat,Nat), 
     PMPair (Var "xy1", "x1", "y1", 
-      IfThEl (IsZero (Var "x1"), Produce( Var "y1"), App ( ValPair(Pred (Var "x1"), Succ (Var "y1") ), Force( Var "addval" )))))));
+      IfThEl (IsZero (Var "x1"), Produce( Var "y1"), App ( ValPair(Pred (Var "x1"), Succ (Var "y1") ), Force( Var "addval" ))))));
   whichtyp = C (Arrow (VCross(Nat,Nat), F Nat))
-  }]
+  };
 
-(* in check_program, nest everything with let-ins as follows
-   a
-   b
-   c
-   d
-   -> let a = thunk a.body in let b = thunk b.body in let c = thunk c.body in force a c
+  {name = "0plus0"; (* bro why wont this work *)
+  body = App (ValPair(Zero, Zero), Force ( Var "addval"));
+  whichtyp =  C (F Nat);
+  };
+]  
 
-   then call run program on that nested version?
-   *)
+let compzeropluszero =  [
+  {name = "addcomp";
+body =  Fix("addcomp", Arrow (U (CCross(F Nat,F Nat)), F Nat), 
+  Lam("xy", U (CCross( F Nat, F Nat)), 
+  Bind (Fst (Force (Var "xy")), "x" ,
+  Bind (Snd (Force (Var "xy")), "y",
+  IfThEl (IsZero (Var "x"), 
+  Produce (Var "y"), 
+  App (Thunk (CompPair(Produce (Pred (Var "x")), Produce (Succ (Var "y")))), Force (Var "addcomp" )))))));
+whichtyp = C (Arrow (U (CCross(F Nat,F Nat)),  F Nat))
+};
 
+  {name = "0plus0"; (* bro why wont this work *)
+  body = App (ValPair(Zero, Zero), Force ( Var "addval"));
+  whichtyp =  C (F Nat);
+  };
+] 
 
 let prog = [
 {name = "addval";
@@ -544,9 +550,15 @@ whichtyp = C (Arrow (VCross(Nat,Nat), F Nat))
 };
 
 {name = "0plus0"; (* bro why wont this work *)
-body = App (Thunk (CompPair(Produce Zero, Produce Zero)), Force ( Var "addcomp"));
+body = App (ValPair(Zero, Zero), Force ( Var "addval"));
 whichtyp =  C (F Nat);
 };
+
+(*
+{name = "0plus0"; (* bro why wont this work *)
+body = App (Thunk (CompPair(Produce Zero, Produce Zero)), Force ( Var "addcomp"));
+whichtyp =  C (F Nat);
+}; *)
 (*
 {name = "3plus2";
 body = App (ValPair( Succ(Succ(Succ Zero)), Succ(Succ Zero)), Force ( Var "addval"));
