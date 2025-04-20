@@ -1,19 +1,17 @@
 open List
 
 (* define the types (computations and values) and terms) *)
-(* i have omitted dependent types, but we could add them*)
-
 type tpV = 
 | Unit
 | Bool
 | Nat
 | U of tpC    (* U B *)
 | VCross of tpV * tpV  (* A x A' *)
-| Sum of tpV * tpV (* A + A' *) (* value, so just thunk it as so: thunk (inl (thunk t)) if you want it computation*)
+| Sum of tpV * tpV (* A + A' *) (* value type, if you want to use it with computations: produce (inl (thunk t, U tpC)) if you want sum types for computations *)
 and 
 tpC = 
 | F of tpV     (* F A *)
-| Arrow of tpV * tpC (* A -> B *)
+| Arrow of tpV * tpC (* A -> B *)  (* thunk the argument to pass a term of computation type to a function *)
 | CCross of tpC * tpC   (* B x B'*)
 
 (* terms with variables named using strings *)
@@ -43,8 +41,6 @@ type named_tm =
 | Force of named_tm (* force t *)
 | Thunk of named_tm (* thunk t *)
 | Fix of string * tpC * named_tm
-(* what is "diverge", but also we dont need it because it can be desugared as "fix x.force x" which we have with fix
-   it just means infinite loop on any input??? emily help! p71 levy *)
 
 
 type ctx = (string * tpV) list
@@ -195,7 +191,7 @@ type tm =
 | Inr of tm * tpV (* inr t *)
 | Case of tm * tm * tm (* pm t as inl x -> t1 | inl r -> t2 *)
 | Lam of tpV * tm                (* also called pop *)
-| App of tm * tm                           (* also called push *)
+| App of tm * tm                 (* also called push *)
 | Bind of tm * tm    (* t1 to x. t2 *)
 | Produce of tm (* produce t *)
 | Force of tm (* force t *)
@@ -389,7 +385,7 @@ let rec eval (t : tm) = match t with
   | Thunk t1 -> eval t1 
   | _ -> raise Crash)
 | Thunk t -> Thunk t
-| Fix (tp, t) -> eval (subst (Thunk (Fix (tp, t))) 0 t) (* emily please check *)
+| Fix (tp, t) -> eval (subst (Thunk (Fix (tp, t))) 0 t) 
 
 
 let test_eval_success t goal : bool = 
@@ -428,14 +424,17 @@ let testeval21 = test_eval_success (App ( ValPair (True, False), Lam ( VCross (B
 
 
 
-(*test a whole program, first type check then run??*)
+(* Here is where we will typecheck and run programs we write in CBPV *)
 
-(* maybe add pred function, multiplication, factorial??*)
+(* The programmer must specify for each function in a program if it is a computation type or a value type. 
+   This makes things easier in typechecking and running because otherwise we need to recursively check if each function 
+   is a comp or val type to make a choice based on this, but force thunk sequences make this more difficult than just 
+   checking the outermost constructor so we've decided to not bother with it.  *)
 type either = C | V 
 
 (* name is the name of the function
    body is the body of the function
-   whichtyp tells us if the body is a computation or a value type (makes things easier for me ok)*)
+   whichtyp tells us if the body is a computation or a value type*)
 type decl =
   {
     name: string;
@@ -445,29 +444,17 @@ type decl =
 
 type program = decl list
 
-
-
-let check_program p =
+(* Typechecks a whole program 
+   Returns unit upon success. 
+   Otherwise the type inference above will throw some (helpful?) error *)
+let check_program p : unit =
   let process_decl ctx { name; body; whichtyp } = 
   (match whichtyp with 
-    | V ->  (try let x = typeofV ctx body in (name, x) :: ctx  with 
-      | _ ->  raise (TypeError ("program " ^ name ^ " didnt typecheck")))
-    | C ->   let x = typeofC ctx body in (name, U x) :: ctx  
-     (* | _ ->  raise (TypeError ("program " ^ name ^ " didnt typecheck"))))*))
+    | V ->  let x = typeofV ctx body in (name, x) :: ctx  
+    | C ->  let x = typeofC ctx body in (name, U x) :: ctx )
   in
   ignore (List.fold_left process_decl [] p)
 
-  (*
-let check_program p =
-  let process_decl ctx { name; body; whichtyp } =
-    (match whichtyp with 
-    | V tpv ->  if typeofV ctx body = tpv then
-      (name, tpv) :: ctx else raise (TypeError ("program " ^ name ^ " didnt typecheck"))
-    | C tpc ->  if typeofC ctx body = tpc then
-      (name, U tpc) :: ctx else raise (TypeError ("program " ^ name ^ " didnt typecheck")))
-  in
-  ignore (List.fold_left process_decl [] p)
-*)
 
 (* Runs programs that has functions that can refer to each other,
    outputs the result of the last function defined as a computation type.*)
@@ -485,7 +472,8 @@ let run_program p : tm  =
   in
   eval (debruijnify [] (build p) )
 
-(* Version where functions in a program cant see each other*)
+(* Version where functions in a program cant see each other, 
+   but each function's output is returned in a list according to its postition in the file *)
 (*
 let run_program p : tm list = 
   check_program p;
@@ -500,7 +488,7 @@ let run_program p : tm list =
 
 
 
-(* Here are some example programs written in CBPV*)
+(* Here are some example programs written in CBPV. The most interesting is factorial4 *)
 let const1 =  [
   {name = "one";
   body = Succ Zero;
@@ -645,9 +633,10 @@ let diverge = [{
   whichtyp = C;
   }]
 
-(* transpiler from CBN to CBPV p277
-   the translation is also proven on paper
-*)
+
+
+
+(* Transpiler from CBN to CBPV *)
 
 type tpN = 
 | ArrowN of tpN * tpN
@@ -656,7 +645,7 @@ type tpN =
 | UnitN
 | BoolN
 
-(* uses debruijn *)
+(* uses debruijn indices to avoid dealing with the need for fresh variable names *)
 type ntm = 
 | UnitN
 | TrueN
@@ -674,7 +663,7 @@ type ntm =
 | LetInN of string * ntm * ntm
 | FixN of tpN * ntm
 
-(* following p 59*)
+(* following Levy p59*)
 (* translation on types *)
 let rec trans_tp (tp:tpN) : tpC = match tp with 
 | ArrowN (t1,t2) -> Arrow (U( trans_tp t1), trans_tp t2)
@@ -683,12 +672,12 @@ let rec trans_tp (tp:tpN) : tpC = match tp with
 | UnitN -> F (Unit)
 | BoolN -> F (Bool)
 
-
+(* translation on contexts *)
 type ctxN = (string * tpN) list
 let rec trans_ctx (ctx : ctxN): ctx = match ctx with
 | [] -> []
 | (x, tp)::xs -> (x, U (trans_tp tp) ) :: trans_ctx ctx 
-                  (* ^ only value types can be in context so we thunk it. Levy says this on 56 *)
+                  (* ^ only value types can be in context so we thunk it. Levy p.56 *)
 
 (* translation on terms *)
 let rec trans (t : ntm) : tm = 
@@ -708,6 +697,6 @@ let rec trans (t : ntm) : tm =
 | InrN (t, a) -> Produce (Inr (Thunk (trans t ), U (trans_tp a)))
 | IfThEl (t1,t2,t3) -> Bind ( shift 0 1 (trans t1), IfThEl (Var 0,  (shift 0 1 (trans t2)),  (shift 0 1 (trans t3)) ))
 | LetInN (x, t1, t2) -> LetIn (Thunk (trans t1), trans t2)
-| FixN (tp, t) -> Fix ( trans_tp tp , trans t ) (* no idea if this is right *)
+| FixN (tp, t) -> Fix ( trans_tp tp , trans t ) 
 
-(*for proof do true, pair, app, lam, case (easiest ot hardest)  *)
+(* proof for true, pair, app, lam, case (easiest ot hardest) can be found in the report *)
