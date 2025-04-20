@@ -70,7 +70,7 @@ let rec typeofV (ctx:ctx) (t : named_tm) : tpV = match t with
   | Thunk t -> U (typeofC ctx t)
   | Inl (t, a) -> Sum (typeofV ctx t, a) 
   | Inr (t, a) -> Sum (a, typeofV ctx t) 
-  | ValPair (t1, t2) -> (let (x,y) = typeofV ctx t1, typeofV ctx t2 in VCross (x,y))  
+  | ValPair (t1, t2) -> (let (x,y) = (typeofV ctx t1, typeofV ctx t2) in VCross (x,y))  
   | _ ->  raise (TypeError ("Supposed to be a value, but it isn't " ^ (String.concat "" (List.map (fun x -> fst x ^ ", ") ctx))))
 and typeofC (ctx : ctx) (t : named_tm) : tpC = match t with
   | Lam (x,a,t) -> Arrow( a, typeofC ((x,a)::(List.filter (fun z -> fst z <> x ) ctx)) t)            
@@ -376,6 +376,7 @@ let rec eval (t : tm) = match t with
 )
 | Lam (tp, t) -> Lam (tp, t)         
 | App (v, t2) -> (match eval t2 with
+  | Fix (tp, t) -> let arg = shift 0 1 v in eval (shift 0 (-1) (subst arg 0 t))
   | Lam (tp, t) -> let arg = shift 0 1 v in eval (shift 0 (-1) (subst arg 0 t)) 
   | _ -> raise Crash
 )                    (* also called push *)
@@ -455,7 +456,7 @@ let check_program p =
 (* runs programs that refer to each other, theres definetly a better way to do it. the old version is commented out below*)
 let run_program p : tm = 
   check_program p;
-  let rec build p = 
+  let rec build p  = 
   match p with 
   | [] -> failwith "empty program"
   | [{ name; body; whichtyp }] -> body
@@ -506,7 +507,7 @@ let test = [
    b
    c
    d
-   -> let a = a.body in let b = b.body in let c = c.body in d
+   -> let a = thunk a.body in let b = thunk b.body in let c = thunk c.body in force a c
 
    then call run program on that nested version?
    *)
@@ -542,6 +543,17 @@ body =  Fix ("timesval", Arrow (VCross(Nat,Nat), F Nat),
 whichtyp = C (Arrow (VCross(Nat,Nat), F Nat))
 };
 
+{name = "0plus0"; (* bro why wont this work *)
+body = Force (App (ValPair(Zero, Zero), Force ( Var "addval")));
+whichtyp =  V Nat;
+};
+(*
+{name = "3plus2";
+body = App (ValPair( Succ(Succ(Succ Zero)), Succ(Succ Zero)), Force ( Var "addval"));
+whichtyp =  V Nat;
+};
+*)
+(*
 {name = "timescomp"; (* this one doesnt work for some reason. issue is in Thunk (CompPair( Produce (Pred (Var "a")), Produce (Var "b"))) nit being the right type to apply to timesval???*)
 body =  Fix ("timescomp", Arrow (U (CCross(F Nat,F Nat)), F Nat),
   Lam("ab",U (CCross( F Nat,F Nat)), 
@@ -552,7 +564,7 @@ body =  Fix ("timescomp", Arrow (U (CCross(F Nat,F Nat)), F Nat),
     App ( Thunk (CompPair (Produce (Var "b"), App (Thunk (CompPair( Produce (Pred (Var "a")), Produce (Var "b"))), Force (Var "timesval")))), Force (Var "addcomp")))))));
 whichtyp = C (Arrow (U (CCross(F Nat,F Nat)), F Nat)) 
 };
-
+*)
 (*
 {name = "factorial";
 body = Fix ("factorial", Arrow (Nat, F Nat),
