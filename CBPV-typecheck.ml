@@ -501,9 +501,13 @@ let run_program p : tm list =
 
 
 (* Here are some example programs written in CBPV*)
+let const1 =  [
+  {name = "one";
+  body = Succ Zero;
+  whichtyp = V; 
+  };
+]
 
-
-(* works, dont touch it *)
 let zeropluszero =  [
   {name = "addval";
   body =  Fix("addval", Arrow (VCross(Nat,Nat), F Nat),
@@ -519,13 +523,6 @@ let zeropluszero =  [
   };
 ]  
 
-let const1 =  [
-  {name = "one";
-  body = Succ Zero;
-  whichtyp = V; 
-  };
-]
-(* works dont touch it *)
 let compzeropluszero =  [
 {
   name = "addcomp";
@@ -546,15 +543,7 @@ let compzeropluszero =  [
 };
 ] 
 
-let prog = [
-{name = "addval";
-body =  Fix("addval", Arrow (VCross(Nat,Nat), F Nat),
-  Lam("xy1", VCross(Nat,Nat), 
-  PMPair (Var "xy1", "x1", "y1", 
-    IfThEl (IsZero (Var "x1"), Produce( Var "y1"), App ( ValPair(Pred (Var "x1"), Succ (Var "y1") ), Force( Var "addval" ))))));
-whichtyp = C;
-};
-
+let val3times2 = [
 {name = "addcomp";
 body =  Fix("addcomp", Arrow (U (CCross(F Nat,F Nat)), F Nat), 
   Lam("xy", U (CCross( F Nat, F Nat)), 
@@ -566,7 +555,7 @@ body =  Fix("addcomp", Arrow (U (CCross(F Nat,F Nat)), F Nat),
 whichtyp = C;
 };
 
-{name = "timesval"; (* this works *)
+{name = "timesval"; 
 body =  Fix ("timesval", Arrow (VCross(Nat,Nat), F Nat),
   Lam("ab1", VCross(Nat,Nat), 
   PMPair (Var "ab1", "a1", "b1", 
@@ -576,43 +565,80 @@ body =  Fix ("timesval", Arrow (VCross(Nat,Nat), F Nat),
 whichtyp = C;
 };
 
-{name = "3times2";
+{name = "val3times2";
 body = App (ValPair( Succ(Succ(Succ Zero)), Succ(Succ Zero)), Force ( Var "timesval"));
 whichtyp =  C;
 };
+]
 
-(*
-{name = "timescomp"; (* this one doesnt work for some reason. issue is in Thunk (CompPair( Produce (Pred (Var "a")), Produce (Var "b"))) nit being the right type to apply to timesval???*)
+let comp3times2 = [
+  {name = "addcomp";
+  body =  Fix("addcomp", Arrow (U (CCross(F Nat,F Nat)), F Nat), 
+    Lam("xy", U (CCross( F Nat, F Nat)), 
+    Bind (Fst (Force (Var "xy")), "x" ,
+    Bind (Snd (Force (Var "xy")), "y",
+    IfThEl (IsZero (Var "x"), 
+    Produce (Var "y"), 
+    App (Thunk (CompPair(Produce (Pred (Var "x")), Produce (Succ (Var "y")))), Force (Var "addcomp" )))))));
+  whichtyp = C;
+  };
+  
+  {name = "timescomp"; 
+  body =  Fix ("timescomp", Arrow (U (CCross(F Nat,F Nat)), F Nat),
+    Lam("ab",U (CCross( F Nat,F Nat)), 
+    Bind (Fst (Force (Var "ab")), "a" ,
+    Bind (Snd (Force (Var "ab")), "b",
+    IfThEl (IsZero (Var "a"), 
+      Produce Zero, 
+      App ( Thunk (CompPair (Produce (Var "b"), App (Thunk (CompPair( Produce (Pred (Var "a")), Produce (Var "b"))), Force (Var "timescomp")))), Force (Var "addcomp")))))));
+  whichtyp = C  
+  };
+  
+  {
+    name = "comp3times2";
+    body = App (Thunk (CompPair( Produce (Succ( Succ (Succ Zero))), Produce ( Succ (Succ Zero)))), Force ( Var "timescomp"));
+    whichtyp =  C;
+  };
+]
+
+
+let factorial4 = [
+{name = "addcomp";
+body =  Fix("addcomp", Arrow (U (CCross(F Nat,F Nat)), F Nat), 
+  Lam("xy", U (CCross( F Nat, F Nat)), 
+  Bind (Fst (Force (Var "xy")), "x" ,
+  Bind (Snd (Force (Var "xy")), "y",
+  IfThEl (IsZero (Var "x"), 
+  Produce (Var "y"), 
+  App (Thunk (CompPair(Produce (Pred (Var "x")), Produce (Succ (Var "y")))), Force (Var "addcomp" )))))));
+whichtyp = C;
+};
+
+{name = "timescomp";
 body =  Fix ("timescomp", Arrow (U (CCross(F Nat,F Nat)), F Nat),
   Lam("ab",U (CCross( F Nat,F Nat)), 
   Bind (Fst (Force (Var "ab")), "a" ,
   Bind (Snd (Force (Var "ab")), "b",
   IfThEl (IsZero (Var "a"), 
     Produce Zero, 
-    App ( Thunk (CompPair (Produce (Var "b"), App (Thunk (CompPair( Produce (Pred (Var "a")), Produce (Var "b"))), Force (Var "timesval")))), Force (Var "addcomp")))))));
-whichtyp = C (Arrow (U (CCross(F Nat,F Nat)), F Nat)) 
+    App ( Thunk (CompPair (Produce (Var "b"), App (Thunk (CompPair( Produce (Pred (Var "a")), Produce (Var "b"))), Force (Var "timescomp")))), Force (Var "addcomp")))))));
+whichtyp = C  
 };
-*)
-(*
+
 {name = "factorial";
 body = Fix ("factorial", Arrow (Nat, F Nat),
   Lam ("n", Nat, 
-    IfThEl( IsZero (Var "n"), Succ Zero, App ( Var "n", App( App (Pred (Var "n"), Force( Var "factorial") ), Force (Var "times"))))));
-whichtyp = C (Arrow (Nat, F Nat));
+    IfThEl( IsZero (Var "n"), Produce (Succ Zero), App ( Thunk (CompPair( Produce (Var "n") , App( Pred (Var "n") ,Force (Var "factorial")))), Force (Var "timescomp")))));
+whichtyp = C ;
 };
-{name = "fact3";
-body = Produce (App (Succ (Succ (Succ Zero)), Force (Var "factorial")));
-whichtyp = C(F Nat);
+
+{name = "fact4";
+body = (App (Succ (Succ (Succ( Succ Zero))), Force (Var "factorial")));
+whichtyp = C;
 }
-
-{name = "3plus2";
-body =  Produce (App ( ValPair( Succ(Succ(Succ Zero)), Succ(Succ Zero)), Force( Var "addval" )));
-whichtyp =  V Nat;
-};
-
-*)
 ]
 
+(* loops forever *)
 let diverge = [{
   name = "diverge"; 
   body = Fix ("diverge", F Unit , Force (Var "diverge"));
@@ -620,7 +646,7 @@ let diverge = [{
   }]
 
 (* transpiler from CBN to CBPV p277
-   prove translation on paper
+   the translation is also proven on paper
 *)
 
 type tpN = 
