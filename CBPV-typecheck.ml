@@ -431,8 +431,11 @@ let testeval21 = test_eval_success (App ( ValPair (True, False), Lam ( VCross (B
 (*test a whole program, first type check then run??*)
 
 (* maybe add pred function, multiplication, factorial??*)
-type either = C of tpC | V of tpV
+type either = C | V 
 
+(* name is the name of the function
+   body is the body of the function
+   whichtyp tells us if the body is a computation or a value type (makes things easier for me ok)*)
 type decl =
   {
     name: string;
@@ -442,6 +445,19 @@ type decl =
 
 type program = decl list
 
+
+
+let check_program p =
+  let process_decl ctx { name; body; whichtyp } = 
+  (match whichtyp with 
+    | V ->  (try let x = typeofV ctx body in (name, x) :: ctx  with 
+      | _ ->  raise (TypeError ("program " ^ name ^ " didnt typecheck")))
+    | C ->   let x = typeofC ctx body in (name, U x) :: ctx  
+     (* | _ ->  raise (TypeError ("program " ^ name ^ " didnt typecheck"))))*))
+  in
+  ignore (List.fold_left process_decl [] p)
+
+  (*
 let check_program p =
   let process_decl ctx { name; body; whichtyp } =
     (match whichtyp with 
@@ -451,19 +467,21 @@ let check_program p =
       (name, U tpc) :: ctx else raise (TypeError ("program " ^ name ^ " didnt typecheck")))
   in
   ignore (List.fold_left process_decl [] p)
-
+*)
 
 (* Runs programs that has functions that can refer to each other,
-   outputs the result of the last function defined.*)
+   outputs the result of the last function defined as a computation type.*)
 let run_program p : tm  = 
   check_program p;
   let rec build p  = 
   match p with 
   | [] -> failwith "empty program"
-  | [{ name; body; whichtyp }] -> body
+  | [{ name; body; whichtyp }] -> (match whichtyp with 
+    | C -> body
+    | V -> Produce body)
   | { name; body; whichtyp } :: xs -> match whichtyp with 
-    | C tpc -> LetIn( name, Thunk body, build xs ) 
-    | V tpv -> LetIn( name, body, build xs ) 
+    | C -> LetIn( name, Thunk body, build xs ) 
+    | V -> LetIn( name, body, build xs ) 
   in
   eval (debruijnify [] (build p) )
 
@@ -482,7 +500,7 @@ let run_program p : tm list =
 
 
 
-(* program that has add, multiply, factorial, and two tests for factorial *)
+(* Here are some example programs written in CBPV*)
 
 
 (* works, dont touch it *)
@@ -492,31 +510,40 @@ let zeropluszero =  [
     Lam("xy1", VCross(Nat,Nat), 
     PMPair (Var "xy1", "x1", "y1", 
       IfThEl (IsZero (Var "x1"), Produce( Var "y1"), App ( ValPair(Pred (Var "x1"), Succ (Var "y1") ), Force( Var "addval" ))))));
-  whichtyp = C (Arrow (VCross(Nat,Nat), F Nat))
+  whichtyp = C; 
   };
 
   {name = "0plus0"; (* bro why wont this work *)
   body = App (ValPair(Zero, Zero), Force ( Var "addval"));
-  whichtyp =  C (F Nat);
+  whichtyp =  C;
   };
 ]  
 
+let const1 =  [
+  {name = "one";
+  body = Succ Zero;
+  whichtyp = V; 
+  };
+]
+(* works dont touch it *)
 let compzeropluszero =  [
-  {name = "addcomp";
-body =  Fix("addcomp", Arrow (U (CCross(F Nat,F Nat)), F Nat), 
+{
+  name = "addcomp";
+  body =  Fix("addcomp", Arrow (U (CCross(F Nat,F Nat)), F Nat), 
   Lam("xy", U (CCross( F Nat, F Nat)), 
   Bind (Fst (Force (Var "xy")), "x" ,
   Bind (Snd (Force (Var "xy")), "y",
   IfThEl (IsZero (Var "x"), 
   Produce (Var "y"), 
   App (Thunk (CompPair(Produce (Pred (Var "x")), Produce (Succ (Var "y")))), Force (Var "addcomp" )))))));
-whichtyp = C (Arrow (U (CCross(F Nat,F Nat)),  F Nat))
+ whichtyp = C;
 };
 
-  {name = "0plus0"; (* bro why wont this work *)
-  body = App (ValPair(Zero, Zero), Force ( Var "addval"));
-  whichtyp =  C (F Nat);
-  };
+{
+  name = "0plus0";
+  body = App (Thunk (CompPair( Produce Zero, Produce Zero)), Force ( Var "addcomp"));
+  whichtyp =  C;
+};
 ] 
 
 let prog = [
@@ -525,7 +552,7 @@ body =  Fix("addval", Arrow (VCross(Nat,Nat), F Nat),
   Lam("xy1", VCross(Nat,Nat), 
   PMPair (Var "xy1", "x1", "y1", 
     IfThEl (IsZero (Var "x1"), Produce( Var "y1"), App ( ValPair(Pred (Var "x1"), Succ (Var "y1") ), Force( Var "addval" ))))));
-whichtyp = C (Arrow (VCross(Nat,Nat), F Nat))
+whichtyp = C;
 };
 
 {name = "addcomp";
@@ -536,35 +563,24 @@ body =  Fix("addcomp", Arrow (U (CCross(F Nat,F Nat)), F Nat),
   IfThEl (IsZero (Var "x"), 
   Produce (Var "y"), 
   App (Thunk (CompPair(Produce (Pred (Var "x")), Produce (Succ (Var "y")))), Force (Var "addcomp" )))))));
-whichtyp = C (Arrow (U (CCross(F Nat,F Nat)),  F Nat))
+whichtyp = C;
 };
 
-{name = "timesval"; (* only issue now is different functions cannot call eachother in run_program. idk how ot fix this. *)
+{name = "timesval"; (* this works *)
 body =  Fix ("timesval", Arrow (VCross(Nat,Nat), F Nat),
   Lam("ab1", VCross(Nat,Nat), 
   PMPair (Var "ab1", "a1", "b1", 
   IfThEl (IsZero (Var "a1"), 
     Produce Zero, 
     App ( Thunk (CompPair( Produce(Var "b1"), App (ValPair(Pred (Var "a1"), Var "b1"),Force (Var "timesval")))), Force (Var "addcomp"))))));
-whichtyp = C (Arrow (VCross(Nat,Nat), F Nat))
+whichtyp = C;
 };
 
-{name = "0plus0"; (* bro why wont this work *)
-body = App (ValPair(Zero, Zero), Force ( Var "addval"));
-whichtyp =  C (F Nat);
+{name = "3times2";
+body = App (ValPair( Succ(Succ(Succ Zero)), Succ(Succ Zero)), Force ( Var "timesval"));
+whichtyp =  C;
 };
 
-(*
-{name = "0plus0"; (* bro why wont this work *)
-body = App (Thunk (CompPair(Produce Zero, Produce Zero)), Force ( Var "addcomp"));
-whichtyp =  C (F Nat);
-}; *)
-(*
-{name = "3plus2";
-body = App (ValPair( Succ(Succ(Succ Zero)), Succ(Succ Zero)), Force ( Var "addval"));
-whichtyp =  V Nat;
-};
-*)
 (*
 {name = "timescomp"; (* this one doesnt work for some reason. issue is in Thunk (CompPair( Produce (Pred (Var "a")), Produce (Var "b"))) nit being the right type to apply to timesval???*)
 body =  Fix ("timescomp", Arrow (U (CCross(F Nat,F Nat)), F Nat),
@@ -598,9 +614,9 @@ whichtyp =  V Nat;
 ]
 
 let diverge = [{
-  name = "omega"; 
-  body = Fix ("omega", F Unit , Force (Var "omega"));
-  whichtyp = C (F Unit);
+  name = "diverge"; 
+  body = Fix ("diverge", F Unit , Force (Var "diverge"));
+  whichtyp = C;
   }]
 
 (* transpiler from CBN to CBPV p277
