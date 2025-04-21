@@ -681,7 +681,6 @@ let rec trans_ctx (ctx : ctxN): ctx = match ctx with
 
 (* translation on terms *)
 let rec trans (t : ntm) : tm = 
-  (*parse t for all the variable names*)
   match t with 
 | UnitN -> Produce (Unit)
 | TrueN -> Produce (True)
