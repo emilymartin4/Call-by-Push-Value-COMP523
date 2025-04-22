@@ -505,7 +505,7 @@ let zeropluszero =  [
   whichtyp = C; 
   };
 
-  {name = "0plus0"; (* bro why wont this work *)
+  {name = "0plus0"; 
   body = App (ValPair(Zero, Zero), Force ( Var "addval"));
   whichtyp =  C;
   };
